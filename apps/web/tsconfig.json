@@ -1,8 +1,6 @@
 {
   "extends": "@primer/config/tsconfig/nextjs",
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }
