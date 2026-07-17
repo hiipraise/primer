@@ -1,5 +1,6 @@
 export { createClient } from "./client";
 export { createServerSupabaseClient } from "./server";
+export { createServiceRoleClient } from "./service";
 export { createBrowserSupabaseClient } from "./browser";
 
 export {

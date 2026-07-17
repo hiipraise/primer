@@ -84,9 +84,13 @@ This installs all dependencies for the monorepo (apps/web, packages/db, packages
 1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and click **New project**.
 2. Choose a name (e.g., "primer"), set a secure database password, and pick a region close to you.
 3. Wait ~2 minutes for the project to provision.
-4. Once ready, go to **Project Settings → API** and note down:
-   - **Project URL** — looks like `https://xxxxx.supabase.co`
-   - **anon public key** — the `anon` key (NOT the `service_role` key)
+4. Once ready, go to **Project Settings → API** and note down the following:
+
+   | Variable | Where to find it |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | **Project URL** — looks like `https://xxxxx.supabase.co` |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **anon public** key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | **service_role** key (⚠️ keep this secret — never expose it client-side) |
 
 ---
 
@@ -104,6 +108,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 
 # Your Supabase anon/public key (from Step 2)
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Server-side only — used by createServiceRoleClient() to bypass RLS
+# for internal tables (anon_sessions). Get it from Supabase dashboard
+# → Project Settings → API → service_role key. NOT exposed to the client.
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Your Groq API key (get one at https://console.groq.com/keys)
 GROQ_API_KEY=gsk_your_groq_api_key_here

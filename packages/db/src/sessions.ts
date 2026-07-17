@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "./server";
+import { createServiceRoleClient } from "./service";
 
 // ─── Types ───────────────────────────────────────────────────────────
 export interface SessionRow {
@@ -101,7 +102,7 @@ export async function updateSession(
 export async function getOrCreateAnonSession(
   anonCookieId: string
 ): Promise<{ id: string; generations_used: number }> {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createServiceRoleClient();
 
   // Try to find existing — may return null (no rows) or error (RLS, missing table, etc.)
   const { data: existing, error: findError } = await supabase
@@ -144,7 +145,7 @@ export async function getOrCreateAnonSession(
 export async function incrementAnonGenerations(
   anonCookieId: string
 ): Promise<number> {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createServiceRoleClient();
 
   // Read current count, increment, update.
   // Not fully atomic but sufficient for single-serverless-instance usage.
