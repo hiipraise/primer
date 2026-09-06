@@ -14,22 +14,34 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
+            request.cookies.set(name, value),
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 
-  // Silently refresh the auth session — this is what keeps users logged in
-  // across tab closes and browser restarts, without touching localStorage.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Do not let an unavailable auth service take down public pages.
+  let user = null;
+  try {
+    const authCheck = supabase.auth.getUser();
+    const result = await Promise.race([
+      authCheck,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Supabase auth check timed out")),
+          1500,
+        ),
+      ),
+    ]);
+    user = result.data.user;
+  } catch {
+    // Continue without a refreshed session; route handlers can retry auth.
+  }
 
   // Issue an anonymous cookie for pre-signup users.
   // This is an httpOnly, secure, server-side cookie — never accessible via JS.
