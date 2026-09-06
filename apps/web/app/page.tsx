@@ -12,6 +12,9 @@ import {
   Check,
   Plus,
 } from "lucide-react";
+import { AdSlot } from "@primer/ads";
+
+type PromptFormat = "claude-code" | "cursor" | "v0" | "windsurf" | "generic";
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface SwatchItem {
@@ -21,6 +24,7 @@ interface SwatchItem {
 }
 
 interface ResultData {
+  generation_id?: string;
   prompt: string;
   stack: SwatchItem[];
   tools: SwatchItem[];
@@ -107,7 +111,10 @@ function RecommendGroup({
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         {items.map((it, i) => (
-          <div key={i} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+          <div
+            key={i}
+            style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}
+          >
             <span
               style={{
                 display: "flex",
@@ -178,6 +185,10 @@ export default function Home() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [refineDraft, setRefineDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [format, setFormat] = useState<PromptFormat>("generic");
+  const [qualityNotice, setQualityNotice] = useState(false);
+  const [qualityProceed, setQualityProceed] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const newChatInputRef = useRef<HTMLTextAreaElement>(null);
   const refineInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -198,6 +209,13 @@ export default function Home() {
   // ── Submit a coat (onboarding step) ──────────────────────────────
   const submitCoat = useCallback(() => {
     if (!draft.trim()) return;
+    if (
+      !qualityProceed &&
+      !/platform|web|mobile|app|extension|desktop|ios|android|saas/i.test(draft)
+    ) {
+      setQualityNotice(true);
+      return;
+    }
     const next: Answers = { ...answers, [coat.key]: draft.trim() };
     setAnswers(next);
     setDraft("");
@@ -223,7 +241,7 @@ export default function Home() {
       fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input, format }),
       })
         .then(async (res) => {
           const data = await res.json();
@@ -243,6 +261,7 @@ export default function Home() {
 
           const r: ResultData = {
             prompt: data.prompt,
+            generation_id: data.generation_id,
             stack: data.stack ?? [],
             tools: data.tools ?? [],
             skills: data.skills ?? [],
@@ -254,14 +273,13 @@ export default function Home() {
           setPhase({ phase: "result", result: r });
         })
         .catch((err) => {
-          const msg =
-            err instanceof Error ? err.message : "Generation failed";
+          const msg = err instanceof Error ? err.message : "Generation failed";
           setError(msg);
           setPhase({ phase: "onboarding" });
         })
         .finally(() => setLoading(false));
     }
-  }, [draft, coat, answers, step]);
+  }, [draft, coat, answers, step, format, qualityProceed]);
 
   // ── Copy prompt ──────────────────────────────────────────────────
   const handleCopy = useCallback(() => {
@@ -276,19 +294,37 @@ export default function Home() {
     if (!result) return;
     const sections: string[] = ["=== PROMPT ===\n" + result.prompt];
     const formatItems = (items: SwatchItem[]) =>
-      items.map((it, i) => `${i + 1}. ${it.name} — ${it.note ?? it.reason ?? ""}`).join("\n");
+      items
+        .map((it, i) => `${i + 1}. ${it.name} — ${it.note ?? it.reason ?? ""}`)
+        .join("\n");
     if (result.stack.length > 0) {
-      sections.push("\n=== RECOMMENDED STACK ===\n" + formatItems(result.stack));
+      sections.push(
+        "\n=== RECOMMENDED STACK ===\n" + formatItems(result.stack),
+      );
     }
     if (result.tools.length > 0) {
-      sections.push("\n=== RECOMMENDED TOOLS ===\n" + formatItems(result.tools));
+      sections.push(
+        "\n=== RECOMMENDED TOOLS ===\n" + formatItems(result.tools),
+      );
     }
     if (result.skills.length > 0) {
-      sections.push("\n=== RECOMMENDED SKILLS ===\n" + formatItems(result.skills));
+      sections.push(
+        "\n=== RECOMMENDED SKILLS ===\n" + formatItems(result.skills),
+      );
     }
     navigator.clipboard.writeText(sections.join("\n\n")).catch(() => {});
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 1800);
+  }, [result]);
+
+  const handlePublish = useCallback(async () => {
+    if (!result?.generation_id) return;
+    const response = await fetch(
+      `/api/generations/${result.generation_id}/publish`,
+      { method: "POST" },
+    );
+    const data = await response.json();
+    if (response.ok) setPublishedUrl(`/p/${data.prompt.slug}`);
   }, [result]);
 
   // ── Scroll to bottom ─────────────────────────────────────────────
@@ -323,6 +359,7 @@ export default function Home() {
       body: JSON.stringify({
         input: refineDraft.trim(),
         session_id: result.session_id,
+        format,
       }),
     })
       .then(async (res) => {
@@ -343,6 +380,7 @@ export default function Home() {
 
         const r: ResultData = {
           prompt: data.prompt,
+          generation_id: data.generation_id,
           stack: data.stack ?? [],
           tools: data.tools ?? [],
           skills: data.skills ?? [],
@@ -354,8 +392,7 @@ export default function Home() {
         setPhase({ phase: "result", result: r });
       })
       .catch((err) => {
-        const msg =
-          err instanceof Error ? err.message : "Refinement failed";
+        const msg = err instanceof Error ? err.message : "Refinement failed";
         setError(msg);
         // Keep showing the previous result
         if (result) setPhase({ phase: "result", result });
@@ -364,11 +401,20 @@ export default function Home() {
         setLoading(false);
         setRefineDraft("");
       });
-  }, [refineDraft, result]);
+  }, [refineDraft, result, format]);
 
   // ── Submit from newChat (no session_id — creates new session) ──
   const submitNewChat = useCallback(() => {
     if (!refineDraft.trim()) return;
+    if (
+      !qualityProceed &&
+      !/platform|web|mobile|app|extension|desktop|ios|android|saas/i.test(
+        refineDraft,
+      )
+    ) {
+      setQualityNotice(true);
+      return;
+    }
     setLoading(true);
     setError(null);
     // Keep phase as newChat while loading — no loading screen interruption
@@ -376,7 +422,7 @@ export default function Home() {
     fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: refineDraft.trim() }),
+      body: JSON.stringify({ input: refineDraft.trim(), format }),
     })
       .then(async (res) => {
         const data = await res.json();
@@ -396,6 +442,7 @@ export default function Home() {
 
         const r: ResultData = {
           prompt: data.prompt,
+          generation_id: data.generation_id,
           stack: data.stack ?? [],
           tools: data.tools ?? [],
           skills: data.skills ?? [],
@@ -407,8 +454,7 @@ export default function Home() {
         setPhase({ phase: "result", result: r });
       })
       .catch((err) => {
-        const msg =
-          err instanceof Error ? err.message : "Generation failed";
+        const msg = err instanceof Error ? err.message : "Generation failed";
         setError(msg);
         setPhase(user ? { phase: "newChat" } : { phase: "onboarding" });
       })
@@ -416,7 +462,7 @@ export default function Home() {
         setLoading(false);
         setRefineDraft("");
       });
-  }, [refineDraft, user]);
+  }, [refineDraft, user, format, qualityProceed]);
 
   // ── After auth loads, set the right initial phase ───────────────
   useEffect(() => {
@@ -437,6 +483,8 @@ export default function Home() {
     setDraft("");
     setRefineDraft("");
     setError(null);
+    setQualityNotice(false);
+    setQualityProceed(false);
     setLoading(false);
     window.scrollTo({ top: 0 });
   }, [user]);
@@ -447,7 +495,7 @@ export default function Home() {
     try {
       // Fetch all generations — the list already contains every field we need
       const listRes = await fetch(
-        `/api/generations?session_id=${encodeURIComponent(sessionId)}`
+        `/api/generations?session_id=${encodeURIComponent(sessionId)}`,
       );
       if (!listRes.ok) throw new Error("Session not found");
       const listData = await listRes.json();
@@ -461,6 +509,7 @@ export default function Home() {
 
       const r: ResultData = {
         prompt: latest.output_prompt,
+        generation_id: latest.id,
         stack: latest.stack ?? [],
         tools: latest.tools ?? [],
         skills: latest.skills ?? [],
@@ -635,15 +684,102 @@ export default function Home() {
                     lineHeight: 1.6,
                   }}
                 >
-                  Three short questions, then a stack, the tools worth
-                  using, and a prompt ready to paste anywhere.
+                  Three short questions, then a stack, the tools worth using,
+                  and a prompt ready to paste anywhere.
+                </div>
+              </div>
+            )}
+
+            <label
+              style={{
+                width: "100%",
+                maxWidth: "560px",
+                color: "#B5AF9E",
+                fontSize: "12px",
+              }}
+            >
+              Output format
+              <select
+                value={format}
+                onChange={(event) =>
+                  setFormat(event.target.value as PromptFormat)
+                }
+                style={{
+                  display: "block",
+                  width: "100%",
+                  marginTop: 8,
+                  padding: "10px 12px",
+                  background: "#2B2824",
+                  color: "#EDE9DF",
+                  border: "1px solid #3A362E",
+                  borderRadius: 6,
+                }}
+              >
+                <option value="generic">Generic</option>
+                <option value="claude-code">Claude Code</option>
+                <option value="cursor">Cursor</option>
+                <option value="v0">v0</option>
+                <option value="windsurf">Windsurf</option>
+              </select>
+            </label>
+
+            {qualityNotice && (
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: "560px",
+                  border: "1px solid #80652F",
+                  background: "#30291C",
+                  color: "#E0C688",
+                  borderRadius: 8,
+                  padding: 14,
+                  fontSize: 13,
+                }}
+              >
+                Your idea does not mention a target platform or audience. You
+                can add that detail, or continue with the current idea.
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    onClick={() => {
+                      setQualityProceed(true);
+                      setQualityNotice(false);
+                    }}
+                    style={{
+                      background: "#C08A2E",
+                      border: 0,
+                      borderRadius: 5,
+                      padding: "7px 11px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    onClick={() => setQualityNotice(false)}
+                    style={{
+                      background: "transparent",
+                      color: "#E0C688",
+                      border: "1px solid #80652F",
+                      borderRadius: 5,
+                      padding: "7px 11px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Refine idea
+                  </button>
                 </div>
               </div>
             )}
 
             {/* ── New chat — for authenticated users, no active result ── */}
             {phase.phase === "newChat" && (
-              <div style={{ textAlign: "center", maxWidth: "560px", width: "100%" }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  maxWidth: "560px",
+                  width: "100%",
+                }}
+              >
                 <div
                   style={{
                     fontFamily: "'Bricolage Grotesque', serif",
@@ -664,8 +800,8 @@ export default function Home() {
                     marginBottom: "28px",
                   }}
                 >
-                  Describe your idea. Primer hands you the stack, the tools,
-                  and a ready-to-paste prompt.
+                  Describe your idea. Primer hands you the stack, the tools, and
+                  a ready-to-paste prompt.
                 </div>
                 <div
                   style={{
@@ -730,8 +866,7 @@ export default function Home() {
                       display: "flex",
                       alignItems: "center",
                       gap: "6px",
-                      opacity:
-                        refineDraft.trim() && !loading ? 1 : 0.6,
+                      opacity: refineDraft.trim() && !loading ? 1 : 0.6,
                     }}
                   >
                     {loading ? (
@@ -989,9 +1124,9 @@ export default function Home() {
                     marginBottom: "20px",
                   }}
                 >
-                  You&apos;ve used all {phase.cap} free generations. Sign
-                  in with Google to get unlimited access and save your
-                  sessions permanently.
+                  You&apos;ve used all {phase.cap} free generations. Sign in
+                  with Google to get unlimited access and save your sessions
+                  permanently.
                 </p>
                 <button
                   onClick={signIn}
@@ -1011,10 +1146,22 @@ export default function Home() {
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    <path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      fill="#EA4335"
+                    />
                   </svg>
                   Continue with Google
                 </button>
@@ -1025,8 +1172,8 @@ export default function Home() {
                     color: "#8A8574",
                   }}
                 >
-                  Your {phase.used} existing generations will be available
-                  after signing in.
+                  Your {phase.used} existing generations will be available after
+                  signing in.
                 </p>
               </div>
             )}
@@ -1094,7 +1241,35 @@ export default function Home() {
                   {copied ? <Check size={13} /> : <Copy size={13} />}
                   {copied ? "Copied" : "Copy"}
                 </button>
+                <button
+                  onClick={handlePublish}
+                  disabled={!result.generation_id || Boolean(publishedUrl)}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #45413A",
+                    color: "#EDE9DF",
+                    borderRadius: "4px",
+                    padding: "5px 10px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {publishedUrl ? "Published" : "Share publicly"}
+                </button>
               </div>
+              {publishedUrl && (
+                <a
+                  href={publishedUrl}
+                  style={{
+                    display: "block",
+                    padding: "10px 18px",
+                    color: "#B5E0D4",
+                    fontSize: 12,
+                  }}
+                >
+                  Open public page
+                </a>
+              )}
               <pre
                 style={{
                   margin: 0,
@@ -1206,18 +1381,17 @@ export default function Home() {
                   transition: "color 0.2s",
                 }}
                 onMouseEnter={(e) =>
-                  !copiedAll &&
-                  (e.currentTarget.style.color = "#EDE9DF")
+                  !copiedAll && (e.currentTarget.style.color = "#EDE9DF")
                 }
                 onMouseLeave={(e) =>
-                  !copiedAll &&
-                  (e.currentTarget.style.color = "#B5AF9E")
+                  !copiedAll && (e.currentTarget.style.color = "#B5AF9E")
                 }
               >
                 {copiedAll ? <Check size={15} /> : <Copy size={15} />}
                 {copiedAll ? "Copied full result" : "Copy full result"}
               </button>
             </div>
+            <AdSlot position="generation-result" />
           </div>
         )}
 
@@ -1272,8 +1446,7 @@ export default function Home() {
           <div
             style={{
               height: "40px",
-              background:
-                "linear-gradient(to top, #211F1C 40%, transparent)",
+              background: "linear-gradient(to top, #211F1C 40%, transparent)",
             }}
           />
           <div
@@ -1352,8 +1525,7 @@ export default function Home() {
                     onClick={submitRefine}
                     disabled={!refineDraft.trim()}
                     style={{
-                      background:
-                        refineDraft.trim() ? "#2F6F62" : "#3A362E",
+                      background: refineDraft.trim() ? "#2F6F62" : "#3A362E",
                       border: "none",
                       borderRadius: "6px",
                       width: "32px",
@@ -1361,11 +1533,9 @@ export default function Home() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor:
-                        refineDraft.trim() ? "pointer" : "default",
+                      cursor: refineDraft.trim() ? "pointer" : "default",
                       flexShrink: 0,
-                      opacity:
-                        refineDraft.trim() ? 1 : 0.4,
+                      opacity: refineDraft.trim() ? 1 : 0.4,
                     }}
                   >
                     <ArrowRight size={15} color="#EDF3F1" />

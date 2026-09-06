@@ -2,6 +2,7 @@ import { callGroq } from "./groq";
 import { parseEngineResponse } from "./parser";
 import { getRateLimiter } from "./rate-limiter";
 import { SYSTEM_PROMPT } from "./system-prompt";
+import { formatPrompt } from "./formatter";
 import type { EngineConfig, EngineInput, EngineOutput } from "./types";
 
 // ─── Default configuration ──────────────────────────────────────────
@@ -36,14 +37,12 @@ export class PrimerEngine {
 
     if (!rateResult.allowed) {
       const resetDate = new Date(rateResult.resetAt);
-      const retryAfter = Math.ceil(
-        (rateResult.resetAt - Date.now()) / 1000
-      );
+      const retryAfter = Math.ceil((rateResult.resetAt - Date.now()) / 1000);
 
       throw new RateLimitError(
         `Rate limit exceeded. Try again in ${retryAfter} seconds (resets at ${resetDate.toISOString()}).`,
         retryAfter,
-        rateResult.resetAt
+        rateResult.resetAt,
       );
     }
 
@@ -77,7 +76,12 @@ export class PrimerEngine {
 
     // 4. Parse response
     const sessionId = input.session_id ?? crypto.randomUUID();
-    return parseEngineResponse(raw, sessionId);
+    const parsed = parseEngineResponse(raw, sessionId);
+    return {
+      ...parsed,
+      prompt: formatPrompt(parsed.prompt, input.format ?? "generic"),
+      format: input.format ?? "generic",
+    };
   }
 }
 
@@ -102,7 +106,7 @@ export function getEngine(config?: Partial<EngineConfig>): PrimerEngine {
     const apiKey = config?.groqApiKey ?? process.env.GROQ_API_KEY ?? "";
     if (!apiKey) {
       throw new Error(
-        "GROQ_API_KEY is not configured. Add it to your .env.local file."
+        "GROQ_API_KEY is not configured. Add it to your .env.local file.",
       );
     }
     globalEngine = new PrimerEngine({ ...config, groqApiKey: apiKey });

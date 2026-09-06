@@ -11,6 +11,7 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@primer/ads": "workspace:*",
     "@primer/db": "workspace:*",
     "@primer/engine": "workspace:*",
     "@primer/ui": "workspace:*",

@@ -15,7 +15,15 @@ export interface EngineInput {
   ip: string;
   /** Prior context from a previous generation (for refinements) */
   priorContext?: PriorContext;
+  format?: PromptFormat;
 }
+
+export type PromptFormat =
+  | "claude-code"
+  | "cursor"
+  | "v0"
+  | "windsurf"
+  | "generic";
 
 // ─── Output ──────────────────────────────────────────────────────────
 export interface StackItem {
@@ -40,6 +48,7 @@ export interface EngineOutput {
   skills: SkillItem[];
   session_id: string;
   created_at: string;
+  format: PromptFormat;
 }
 
 // ─── Rate limiting ───────────────────────────────────────────────────

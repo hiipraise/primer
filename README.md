@@ -15,15 +15,15 @@ Primer is model-agnostic — it never recommends a specific AI model. What you p
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS v4 |
-| Backend | Next.js Route Handlers (`/app/api/*`) |
-| Auth | Supabase Auth (Google OAuth) — httpOnly cookies, no localStorage |
-| Database | Supabase Postgres — RLS, sessions, generations |
-| LLM (internal) | Groq API (Llama 3.3 70B) — free tier, 30 req/min |
-| Hosting | Vercel + Supabase (both free-tier) |
-| Rate limiting | In-memory sliding window (10 req / 15 min per IP) |
+| Layer          | Choice                                                           |
+| -------------- | ---------------------------------------------------------------- |
+| Frontend       | Next.js 15 (App Router), TypeScript, Tailwind CSS v4             |
+| Backend        | Next.js Route Handlers (`/app/api/*`)                            |
+| Auth           | Supabase Auth (Google OAuth) — httpOnly cookies, no localStorage |
+| Database       | Supabase Postgres — RLS, sessions, generations                   |
+| LLM (internal) | Groq API (Llama 3.3 70B) — free tier, 30 req/min                 |
+| Hosting        | Vercel + Supabase (both free-tier)                               |
+| Rate limiting  | In-memory sliding window (10 req / 15 min per IP)                |
 
 ## Project structure
 
@@ -86,11 +86,11 @@ This installs all dependencies for the monorepo (apps/web, packages/db, packages
 3. Wait ~2 minutes for the project to provision.
 4. Once ready, go to **Project Settings → API** and note down the following:
 
-   | Variable | Where to find it |
-   |---|---|
-   | `NEXT_PUBLIC_SUPABASE_URL` | **Project URL** — looks like `https://xxxxx.supabase.co` |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **anon public** key |
-   | `SUPABASE_SERVICE_ROLE_KEY` | **service_role** key (⚠️ keep this secret — never expose it client-side) |
+   | Variable                        | Where to find it                                                         |
+   | ------------------------------- | ------------------------------------------------------------------------ |
+   | `NEXT_PUBLIC_SUPABASE_URL`      | **Project URL** — looks like `https://xxxxx.supabase.co`                 |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **anon public** key                                                      |
+   | `SUPABASE_SERVICE_ROLE_KEY`     | **service_role** key (⚠️ keep this secret — never expose it client-side) |
 
 ---
 
@@ -102,7 +102,7 @@ cp .env.example apps/web/.env.local
 
 Open `apps/web/.env.local` and fill in your values:
 
-```env
+````env
 # Your Supabase project URL (from Step 2)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 
@@ -117,10 +117,19 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 # Your Groq API key (get one at https://console.groq.com/keys)
 GROQ_API_KEY=gsk_your_groq_api_key_here
 
+# Optional — ad slots remain disabled unless explicitly enabled.
+ADS_ENABLED=false
+
 # Optional — your app's public URL (defaults to http://localhost:3000)
 # NEXT_PUBLIC_SITE_URL=https://your-app.vercel.app
-```
+ - **Public prompt library** — Share selected generations at `/p/[slug]` and browse them at `/explore`
+ - **Platform formats** — Tailor output for Claude Code, Cursor, v0, Windsurf, or a generic target
+ - **Ad readiness** — Fixed ad slots are available but disabled by default with `ADS_ENABLED=false`
 
+| `/api/generations/:id/publish` | POST | Publish or unpublish a generation |
+| `/api/explore` | GET | List public prompts with pagination and stack filtering |
+| `/p/:slug` | GET | View a public prompt |
+| `/explore` | GET | Browse public prompts |
 ---
 
 ### Step 4: Enable Google OAuth in Supabase
@@ -155,7 +164,7 @@ Your Supabase project needs three tables: `anon_sessions`, `sessions`, and `gene
 # Install Supabase CLI: https://supabase.com/docs/guides/cli
 supabase link --project-ref <your-project-ref>
 supabase db push
-```
+````
 
 ---
 
@@ -180,13 +189,13 @@ This starts the Next.js dev server on [http://localhost:3000](http://localhost:3
 
 If you get stuck, check:
 
-| Symptom | Likely cause |
-|---|---|
+| Symptom                                                                              | Likely cause                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `POST /api/generate` returns 500 with `"Could not find the table 'public.sessions'"` | Database tables not created — run the migration (see Step 5) |
-| `GROQ_API_KEY is not configured` | Missing or incorrect `GROQ_API_KEY` in `apps/web/.env.local` |
-| Google sign-in redirects to an error page | OAuth redirect URL not configured correctly (see Step 4) |
-| Anonymous sessions not persisting after sign-in | Google email may differ; check Supabase Auth users |
-| Onboarding doesn't appear | Clear cookies/local data or check `middleware.ts` |
+| `GROQ_API_KEY is not configured`                                                     | Missing or incorrect `GROQ_API_KEY` in `apps/web/.env.local` |
+| Google sign-in redirects to an error page                                            | OAuth redirect URL not configured correctly (see Step 4)     |
+| Anonymous sessions not persisting after sign-in                                      | Google email may differ; check Supabase Auth users           |
+| Onboarding doesn't appear                                                            | Clear cookies/local data or check `middleware.ts`            |
 
 ---
 
@@ -212,17 +221,17 @@ If you get stuck, check:
 
 ## API reference
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/generate` | POST | Generate a recommendation from an idea |
-| `/api/generations` | GET | Browse session generations (by `session_id`) |
-| `/api/sessions` | GET | List user sessions (paginated) |
-| `/api/sessions/claim` | POST | Claim anonymous sessions after sign-in |
-| `/api/sessions/pending-claim` | GET | Check how many anonymous sessions can be claimed |
-| `/api/auth/user` | GET | Get current user info |
-| `/api/auth/signin` | GET | Start Google OAuth flow |
-| `/api/auth/signout` | GET | Sign out and redirect home |
-| `/auth/callback` | GET | OAuth callback handler |
+| Endpoint                      | Method | Description                                      |
+| ----------------------------- | ------ | ------------------------------------------------ |
+| `/api/generate`               | POST   | Generate a recommendation from an idea           |
+| `/api/generations`            | GET    | Browse session generations (by `session_id`)     |
+| `/api/sessions`               | GET    | List user sessions (paginated)                   |
+| `/api/sessions/claim`         | POST   | Claim anonymous sessions after sign-in           |
+| `/api/sessions/pending-claim` | GET    | Check how many anonymous sessions can be claimed |
+| `/api/auth/user`              | GET    | Get current user info                            |
+| `/api/auth/signin`            | GET    | Start Google OAuth flow                          |
+| `/api/auth/signout`           | GET    | Sign out and redirect home                       |
+| `/auth/callback`              | GET    | OAuth callback handler                           |
 
 ## License
 

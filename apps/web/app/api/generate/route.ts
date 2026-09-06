@@ -19,6 +19,7 @@ const ANON_GENERATION_CAP = 3;
 interface GenerateRequest {
   input: string;
   session_id?: string;
+  format?: "claude-code" | "cursor" | "v0" | "windsurf" | "generic";
 }
 
 // ─── Helper: extract client IP ───────────────────────────────────────
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     if (!body.input || !body.input.trim()) {
       return NextResponse.json(
         { error: "Input is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
             used: anonSession.generations_used,
             cap: ANON_GENERATION_CAP,
           },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
       if (!existing) {
         return NextResponse.json(
           { error: "Session not found." },
-          { status: 404 }
+          { status: 404 },
         );
       }
 
@@ -117,10 +118,11 @@ export async function POST(request: Request) {
       session_id: sessionId,
       ip,
       priorContext,
+      format: body.format ?? "generic",
     });
 
     // Persist the generation to Postgres
-    await createGeneration({
+    const generation = await createGeneration({
       sessionId,
       versionNumber,
       userInput: body.input.trim(),
@@ -128,6 +130,7 @@ export async function POST(request: Request) {
       stack: result.stack,
       tools: result.tools,
       skills: result.skills,
+      format: result.format,
     });
 
     // Increment anonymous generation counter
@@ -141,8 +144,10 @@ export async function POST(request: Request) {
       tools: result.tools,
       skills: result.skills,
       session_id: sessionId,
+      generation_id: generation.id,
       version_number: versionNumber,
       created_at: result.created_at,
+      format: result.format,
     });
   } catch (err) {
     // Rate limit exceeded
@@ -159,7 +164,7 @@ export async function POST(request: Request) {
             "Retry-After": String(err.retryAfter),
             "X-RateLimit-Reset": String(err.resetAt),
           },
-        }
+        },
       );
     }
 

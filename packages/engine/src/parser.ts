@@ -3,7 +3,7 @@ import type { EngineOutput } from "./types";
 // ─── Parse LLM response into structured output ───────────────────────
 export function parseEngineResponse(
   raw: string,
-  sessionId: string
+  sessionId: string,
 ): EngineOutput {
   let json = raw.trim();
 
@@ -26,6 +26,7 @@ export function parseEngineResponse(
       skills: [],
       session_id: sessionId,
       created_at: new Date().toISOString(),
+      format: "generic",
     };
   }
 
@@ -48,19 +49,20 @@ export function parseEngineResponse(
     skills,
     session_id: sessionId,
     created_at: new Date().toISOString(),
+    format: "generic",
   };
 }
 
 // ─── Normalize an array of { name, reason } items ────────────────────
 function normalizeItems(
-  items: unknown
+  items: unknown,
 ): Array<{ name: string; reason: string }> {
   if (!Array.isArray(items)) return [];
 
   return items
     .filter(
       (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null
+        typeof item === "object" && item !== null,
     )
     .map((item) => ({
       name:
