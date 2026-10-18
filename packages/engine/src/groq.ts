@@ -22,11 +22,12 @@ export interface GroqCallOptions {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  jsonObject?: boolean;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────
 const DEFAULT_MODEL = "llama-3.3-70b-versatile";
-const DEFAULT_MAX_TOKENS = 2048;
+const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_TEMPERATURE = 0.7;
 
 // ─── Call Groq API ───────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export async function callGroq(
     model = DEFAULT_MODEL,
     maxTokens = DEFAULT_MAX_TOKENS,
     temperature = DEFAULT_TEMPERATURE,
+    jsonObject = false,
   } = options;
 
   const groq = getClient(apiKey);
@@ -48,6 +50,7 @@ export async function callGroq(
     model,
     max_tokens: maxTokens,
     temperature,
+    ...(jsonObject ? { response_format: { type: "json_object" as const } } : {}),
   });
 
   const content = completion.choices[0]?.message?.content;

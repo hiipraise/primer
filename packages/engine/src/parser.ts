@@ -1,82 +1,41 @@
-import type { EngineOutput } from "./types";
+import { z } from "zod";
+import type { GenerationSpec } from "./types";
 
-// ─── Parse LLM response into structured output ───────────────────────
-export function parseEngineResponse(
-  raw: string,
-  sessionId: string,
-): EngineOutput {
-  let json = raw.trim();
+const itemSchema = z.object({ name: z.string().min(1), reason: z.string().min(1) });
+export const generationSpecSchema = z.object({
+  summary: z.string().min(1),
+  assumptions: z.array(z.string()),
+  stack: z.array(itemSchema),
+  tools: z.array(itemSchema),
+  skills: z.array(itemSchema),
+  architecture: z.string().min(1),
+  data_model: z.string().min(1),
+  api_endpoints: z.array(z.string()),
+  folder_structure: z.array(z.string()),
+  milestones: z.array(z.object({ name: z.string().min(1), description: z.string().min(1) })),
+  testing_plan: z.array(z.string()),
+  deployment_plan: z.array(z.string()),
+  risks: z.array(z.string()),
+  what_changed: z.string().min(1),
+  output_prompt: z.string().min(1),
+});
 
-  // Strip markdown code fences if the model wrapped the JSON
-  const fenceMatch = json.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) {
-    json = fenceMatch[1].trim();
+export class InvalidGenerationResponseError extends Error {
+  readonly code = "INVALID_GENERATION_RESPONSE";
+  constructor(message = "The generated specification did not match the required format.") {
+    super(message);
+    this.name = "InvalidGenerationResponseError";
   }
-
-  // Parse the JSON
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    // If parsing fails, return a fallback with the raw text as the prompt
-    return {
-      prompt: raw,
-      stack: [],
-      tools: [],
-      skills: [],
-      session_id: sessionId,
-      created_at: new Date().toISOString(),
-      format: "generic",
-    };
-  }
-
-  // Extract fields with validation
-  const prompt =
-    typeof parsed.output_prompt === "string"
-      ? parsed.output_prompt
-      : typeof parsed.prompt === "string"
-        ? parsed.prompt
-        : raw;
-
-  const stack = normalizeItems(parsed.stack);
-  const tools = normalizeItems(parsed.tools);
-  const skills = normalizeItems(parsed.skills);
-
-  return {
-    prompt,
-    stack,
-    tools,
-    skills,
-    session_id: sessionId,
-    created_at: new Date().toISOString(),
-    format: "generic",
-  };
 }
 
-// ─── Normalize an array of { name, reason } items ────────────────────
-function normalizeItems(
-  items: unknown,
-): Array<{ name: string; reason: string }> {
-  if (!Array.isArray(items)) return [];
-
-  return items
-    .filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null,
-    )
-    .map((item) => ({
-      name:
-        typeof item.name === "string"
-          ? item.name
-          : typeof item.name === "number"
-            ? String(item.name)
-            : "Unnamed",
-      reason:
-        typeof item.reason === "string"
-          ? item.reason
-          : typeof item.description === "string"
-            ? item.description
-            : "",
-    }))
-    .filter((item) => item.name !== "Unnamed" || item.reason);
+export function parseEngineResponse(raw: string): GenerationSpec {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch {
+    throw new InvalidGenerationResponseError("The model response was not valid JSON.");
+  }
+  const result = generationSpecSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new InvalidGenerationResponseError("The model response did not match the specification schema.");
+  }
+  return result.data as GenerationSpec;
 }

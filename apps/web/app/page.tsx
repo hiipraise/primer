@@ -32,6 +32,43 @@ interface ResultData {
   session_id: string;
   version_number: number;
   created_at?: string;
+  spec?: Record<string, unknown>;
+  files?: Array<{ path: string; content: string }>;
+  change_summary?: string;
+}
+
+interface GenerationResponse extends ResultData {
+  error?: string;
+  code?: string;
+  used?: number;
+  cap?: number;
+}
+
+async function readGenerationStream(response: Response, onSection?: (section: string) => void): Promise<GenerationResponse> {
+  if (!response.ok) return response.json() as Promise<GenerationResponse>;
+  if (!response.body) throw new Error("Generation stream was unavailable.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed: GenerationResponse | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const event = frame.match(/^event:\s*(.+)$/m)?.[1];
+      const data = frame.match(/^data:\s*(.+)$/m)?.[1];
+      if (!event || !data) continue;
+      const parsed = JSON.parse(data) as Record<string, unknown>;
+      if (event === "section") onSection?.(String(parsed.section));
+      if (event === "complete") completed = parsed as unknown as GenerationResponse;
+      if (event === "error") throw new Error(typeof parsed.error === "string" ? parsed.error : "Generation failed.");
+    }
+    if (done) break;
+  }
+  if (!completed) throw new Error("Generation stream ended before completion.");
+  return completed;
 }
 
 type PagePhase =
@@ -179,6 +216,7 @@ export default function Home() {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResultData | null>(null);
+  const [streamedSections, setStreamedSections] = useState<string[]>([]);
   const [recoOpen, setRecoOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
@@ -227,6 +265,7 @@ export default function Home() {
       setLoading(true);
       setPhase({ phase: "generating" });
       setError(null);
+      setStreamedSections([]);
 
       const input = [
         `Goal: ${next.goal}`,
@@ -244,7 +283,7 @@ export default function Home() {
         body: JSON.stringify({ input, format }),
       })
         .then(async (res) => {
-          const data = await res.json();
+          const data = await readGenerationStream(res, (section) => setStreamedSections((current) => [...current, section]));
 
           if (res.status === 403 && data.error === "anon_cap_reached") {
             setPhase({
@@ -268,6 +307,9 @@ export default function Home() {
             session_id: data.session_id,
             version_number: data.version_number ?? 1,
             created_at: data.created_at,
+            spec: data.spec,
+            files: data.files,
+            change_summary: data.change_summary,
           };
           setResult(r);
           setPhase({ phase: "result", result: r });
@@ -352,6 +394,7 @@ export default function Home() {
     if (!refineDraft.trim() || !result) return;
     setLoading(true);
     setError(null);
+    setStreamedSections([]);
 
     fetch("/api/generate", {
       method: "POST",
@@ -363,7 +406,7 @@ export default function Home() {
       }),
     })
       .then(async (res) => {
-        const data = await res.json();
+        const data = await readGenerationStream(res, (section) => setStreamedSections((current) => [...current, section]));
 
         if (res.status === 403 && data.error === "anon_cap_reached") {
           setPhase({
@@ -387,6 +430,9 @@ export default function Home() {
           session_id: data.session_id,
           version_number: data.version_number ?? 1,
           created_at: data.created_at,
+          spec: data.spec,
+          files: data.files,
+          change_summary: data.change_summary,
         };
         setResult(r);
         setPhase({ phase: "result", result: r });
@@ -417,6 +463,7 @@ export default function Home() {
     }
     setLoading(true);
     setError(null);
+    setStreamedSections([]);
     // Keep phase as newChat while loading — no loading screen interruption
 
     fetch("/api/generate", {
@@ -425,7 +472,7 @@ export default function Home() {
       body: JSON.stringify({ input: refineDraft.trim(), format }),
     })
       .then(async (res) => {
-        const data = await res.json();
+        const data = await readGenerationStream(res, (section) => setStreamedSections((current) => [...current, section]));
 
         if (res.status === 403 && data.error === "anon_cap_reached") {
           setPhase({
@@ -449,6 +496,9 @@ export default function Home() {
           session_id: data.session_id,
           version_number: data.version_number ?? 1,
           created_at: data.created_at,
+          spec: data.spec,
+          files: data.files,
+          change_summary: data.change_summary,
         };
         setResult(r);
         setPhase({ phase: "result", result: r });
@@ -967,7 +1017,12 @@ export default function Home() {
                   fontSize: "13.5px",
                 }}
               >
-                {result ? "refining..." : "mixing the coat..."}
+                <div>{result ? "refining..." : "mixing the coat..."}</div>
+                {streamedSections.length > 0 && (
+                  <div aria-live="polite" style={{ marginTop: 12, fontSize: 11 }}>
+                    Building: {streamedSections.map((section) => section.replaceAll("_", " ")).join(" · ")}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1194,6 +1249,11 @@ export default function Home() {
               animation: "fadeInUp 0.4s ease-out",
             }}
           >
+            {loading && streamedSections.length > 0 && (
+              <div aria-live="polite" style={{ color: "#6B6656", fontSize: 12 }}>
+                Updated sections: {streamedSections.map((section) => section.replaceAll("_", " ")).join(" · ")}
+              </div>
+            )}
             {/* Prompt card */}
             <div
               style={{

@@ -21,6 +21,8 @@ export interface GenerationRow {
   tools_json: Record<string, unknown> | null;
   skills_json: Record<string, unknown> | null;
   format: string;
+  spec_json: Record<string, unknown> | null;
+  change_summary: string | null;
   created_at: string;
 }
 
@@ -369,6 +371,8 @@ export async function createGeneration(params: {
   tools?: Array<{ name: string; reason: string }>;
   skills?: Array<{ name: string; reason: string }>;
   format: string;
+  spec: Record<string, unknown>;
+  changeSummary: string;
   owner: SessionOwner;
 }): Promise<GenerationRow> {
   const supabase = await getOwnerClient(params.owner);
@@ -390,6 +394,8 @@ export async function createGeneration(params: {
         ? JSON.parse(JSON.stringify(params.skills))
         : null,
       format: params.format,
+      spec_json: JSON.parse(JSON.stringify(params.spec)),
+      change_summary: params.changeSummary,
     })
     .select()
     .single();

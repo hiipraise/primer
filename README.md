@@ -32,14 +32,14 @@ The database migrations create four tables:
 | --- | --- | --- |
 | `anon_sessions` | Anonymous usage tracked by the `primer_anon_id` cookie | `cookie_id` is unique; `generations_used` tracks usage |
 | `sessions` | A user's idea and its refinement history | `user_id` for signed-in ownership or `anon_cookie_id` for anonymous ownership; has title and timestamps |
-| `generations` | One generated version in a session | `session_id` references `sessions`; stores input, prompt, stack/tools/skills JSON, format, and version number |
+| `generations` | One generated version in a session | `session_id` references `sessions`; stores input, formatted prompt, stack/tools/skills JSON, format, structured spec, change summary, and version number |
 | `public_prompts` | A published generation in the public library | `generation_id` references `generations`; stores slug, title, summary, stack summary, visibility, and view count |
 
 Row-level security is enabled for application tables. Anonymous session bookkeeping is server-managed; the service-role key is only used in server code. Review each migration before applying it to a database.
 
 ## Database migrations
 
-Apply all six SQL files, in numerical order, to a new Supabase project:
+Apply all seven SQL files, in numerical order, to a new Supabase project:
 
 1. [`001_auth_tables.sql`](packages/db/migrations/001_auth_tables.sql) — creates anonymous sessions, sessions, generations, indexes, and initial RLS policies.
 2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) — historical anonymous access policy update, tightened by migration 006.
@@ -47,6 +47,8 @@ Apply all six SQL files, in numerical order, to a new Supabase project:
 4. [`004_enable_rls_anon_sessions.sql`](packages/db/migrations/004_enable_rls_anon_sessions.sql) — enables RLS and blocks direct client access to anonymous usage rows.
 5. [`005_public_prompts.sql`](packages/db/migrations/005_public_prompts.sql) — creates the public prompt library and adds generation format storage.
 6. [`006_secure_anonymous_ownership.sql`](packages/db/migrations/006_secure_anonymous_ownership.sql) — limits direct access to user-owned rows and adds atomic anonymous quota functions.
+
+7. [`007_engine_v2_spec.sql`](packages/db/migrations/007_engine_v2_spec.sql) — stores structured engine specifications and per-version change summaries.
 
 For an existing installation that has already applied migrations 001–005, review and apply only migration 006. It changes RLS policies and installs the quota functions; it does not delete application data.
 
@@ -67,7 +69,7 @@ cd primer
 pnpm install
 ```
 
-Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all six migrations to Supabase, then start the app:
+Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all seven migrations to Supabase, then start the app:
 
 ```sh
 pnpm dev

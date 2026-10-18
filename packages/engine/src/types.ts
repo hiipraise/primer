@@ -1,74 +1,58 @@
-// ─── Input ───────────────────────────────────────────────────────────
 export interface PriorContext {
-  /** The user's previous input */
-  previousInput: string;
-  /** The previously generated output prompt */
-  previousOutput: string;
+  originalIdea: string;
+  currentSpec: GenerationSpec;
 }
 
 export interface EngineInput {
-  /** The user's idea description */
   input: string;
-  /** Unique identifier for this session (for later Phase 4) */
   session_id?: string;
-  /** Client IP address for rate limiting */
   ip: string;
-  /** Set only by a caller that already checked the limiter before session work. */
   rateLimitChecked?: boolean;
-  /** Prior context from a previous generation (for refinements) */
   priorContext?: PriorContext;
   format?: PromptFormat;
 }
 
-export type PromptFormat =
-  | "claude-code"
-  | "cursor"
-  | "v0"
-  | "windsurf"
-  | "generic";
+export type PromptFormat = "claude-code" | "cursor" | "v0" | "windsurf" | "generic";
 
-// ─── Output ──────────────────────────────────────────────────────────
-export interface StackItem {
-  name: string;
-  reason: string;
+export interface StackItem { name: string; reason: string }
+export type ToolItem = StackItem;
+export type SkillItem = StackItem;
+export interface Milestone { name: string; description: string }
+
+export interface GenerationSpec {
+  summary: string;
+  assumptions: string[];
+  stack: StackItem[];
+  tools: ToolItem[];
+  skills: SkillItem[];
+  architecture: string;
+  data_model: string;
+  api_endpoints: string[];
+  folder_structure: string[];
+  milestones: Milestone[];
+  testing_plan: string[];
+  deployment_plan: string[];
+  risks: string[];
+  what_changed: string;
+  output_prompt: string;
 }
 
-export interface ToolItem {
-  name: string;
-  reason: string;
-}
-
-export interface SkillItem {
-  name: string;
-  reason: string;
-}
-
+export interface FormattedFile { path: string; content: string }
 export interface EngineOutput {
   prompt: string;
   stack: StackItem[];
   tools: ToolItem[];
   skills: SkillItem[];
+  spec: GenerationSpec;
+  files: FormattedFile[];
+  change_summary: string;
   session_id: string;
   created_at: string;
   format: PromptFormat;
 }
 
-// ─── Rate limiting ───────────────────────────────────────────────────
-export interface RateLimitConfig {
-  /** Max requests allowed per window */
-  maxRequests: number;
-  /** Window duration in milliseconds */
-  windowMs: number;
-}
-
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  /** Unix timestamp (ms) when the window resets */
-  resetAt: number;
-}
-
-// ─── Engine configuration ────────────────────────────────────────────
+export interface RateLimitConfig { maxRequests: number; windowMs: number }
+export interface RateLimitResult { allowed: boolean; remaining: number; resetAt: number }
 export interface EngineConfig {
   groqApiKey: string;
   model?: string;

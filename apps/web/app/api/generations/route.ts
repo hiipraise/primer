@@ -36,6 +36,8 @@ export async function GET(request: Request) {
           tools: generation.tools_json,
           skills: generation.skills_json,
           format: generation.format,
+          spec: generation.spec_json,
+          change_summary: generation.change_summary,
           created_at: generation.created_at,
         },
       });
@@ -54,6 +56,8 @@ export async function GET(request: Request) {
         tools: generation.tools_json,
         skills: generation.skills_json,
         format: generation.format,
+        spec: generation.spec_json,
+        change_summary: generation.change_summary,
         created_at: generation.created_at,
       })),
       latest_version: latest?.version_number ?? 0,

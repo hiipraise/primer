@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSession, createGeneration, getSession, getLatestGeneration, getOrCreateAnonSession, incrementAnonGenerations, refundAnonGeneration } from "@primer/db";
+import { createSession, createGeneration, getSession, getLatestGeneration, getAllGenerations, getOrCreateAnonSession, incrementAnonGenerations, refundAnonGeneration } from "@primer/db";
 import type { SessionOwner } from "@primer/db";
 import { getEngine, RateLimitError } from "@primer/engine";
 import type { EngineOutput, PriorContext } from "@primer/engine";
@@ -54,10 +54,9 @@ export async function POST(request: Request) {
       if (!existing) return json({ error: "Session not found.", code: "SESSION_NOT_FOUND" }, { status: 404 });
       const latestGen = await getLatestGeneration(sessionId, owner);
       if (latestGen) {
-        priorContext = {
-          previousInput: latestGen.user_input,
-          previousOutput: latestGen.output_prompt,
-        };
+        const versions = await getAllGenerations(sessionId, owner);
+        if (!latestGen.spec_json) return json({ error: "This session cannot be refined because its structured specification is unavailable.", code: "SPEC_NOT_FOUND" }, { status: 409 });
+        priorContext = { originalIdea: versions[0]?.user_input ?? latestGen.user_input, currentSpec: latestGen.spec_json as unknown as import("@primer/engine").GenerationSpec };
         versionNumber = latestGen.version_number + 1;
       }
     }
@@ -102,11 +101,13 @@ export async function POST(request: Request) {
       tools: result.tools,
       skills: result.skills,
       format: result.format,
+      spec: result.spec as unknown as Record<string, unknown>,
+      changeSummary: result.change_summary,
       owner,
     });
     slotReserved = false;
 
-    return json({
+    const payload = {
       prompt: result.prompt,
       stack: result.stack,
       tools: result.tools,
@@ -116,7 +117,17 @@ export async function POST(request: Request) {
       version_number: versionNumber,
       created_at: result.created_at,
       format: result.format,
-    });
+      spec: result.spec,
+      files: result.files,
+      change_summary: result.change_summary,
+    };
+    const encoder = new TextEncoder();
+    const frames = [
+      ...Object.entries({ summary: result.spec.summary, assumptions: result.spec.assumptions, stack: result.stack, tools: result.tools, skills: result.skills, architecture: result.spec.architecture, data_model: result.spec.data_model, api_endpoints: result.spec.api_endpoints, folder_structure: result.spec.folder_structure, milestones: result.spec.milestones, testing_plan: result.spec.testing_plan, deployment_plan: result.spec.deployment_plan, risks: result.spec.risks, what_changed: result.change_summary }).map(([section, value]) => `event: section\ndata: ${JSON.stringify({ section, value })}\n\n`),
+      `event: complete\ndata: ${JSON.stringify(payload)}\n\n`,
+    ];
+    const response = new Response(new ReadableStream({ async start(controller) { for (const frame of frames) { controller.enqueue(encoder.encode(frame)); await new Promise((resolve) => setTimeout(resolve, 25)); } controller.close(); } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive" } });
+    return anonCookieId ? attachAnonCookie(response, anonCookieId, shouldSetCookie) : response;
   } catch (error) {
     if (slotReserved && anonCookieId) {
       try {

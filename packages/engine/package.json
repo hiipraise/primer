@@ -14,7 +14,8 @@
   "dependencies": {
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
-    "groq-sdk": "^0.10.0"
+    "groq-sdk": "^0.10.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@primer/config": "workspace:*",
