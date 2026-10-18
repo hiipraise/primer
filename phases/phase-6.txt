@@ -6,7 +6,7 @@ Work in phases. After each phase: run `pnpm typecheck && pnpm lint && pnpm test`
 - Adaptive intake: 3-6 follow-up questions generated from the first answer.
 - Prompt lint score with actionable fixes before generation.
 - Public API (`/api/v1/generate` with API keys, per-key rate limits) and a `primer` CLI package.
-- Region presets (Paystack/Flutterwave, low-bandwidth mode) and cost estimates in NGN/USD.
+- Region presets (sqaud(by gtbank), low-bandwidth mode) and cost estimates in NGN.
 
 ## Rules
 - Keep the 2-service deployment (Vercel + Supabase) unless I approve a new dependency; justify every new package.
