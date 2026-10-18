@@ -42,6 +42,47 @@ export interface PublicPromptRow {
   generation?: GenerationRow;
 }
 
+export interface PrimerApiKeyRow {
+  id: string;
+  user_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export async function createPrimerApiKey(params: { userId: string; name: string; keyHash: string; keyPrefix: string }): Promise<PrimerApiKeyRow> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("primer_api_keys").insert({ user_id: params.userId, name: params.name, key_hash: params.keyHash, key_prefix: params.keyPrefix }).select().single();
+  if (error || !data) throw new Error("Failed to create API key.");
+  return data as PrimerApiKeyRow;
+}
+
+export async function listPrimerApiKeys(userId: string): Promise<Array<Omit<PrimerApiKeyRow, "key_hash">>> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("primer_api_keys").select("id,user_id,name,key_prefix,created_at,last_used_at,revoked_at").eq("user_id", userId).order("created_at", { ascending: false });
+  if (error) throw new Error("Failed to list API keys.");
+  return (data ?? []) as Array<Omit<PrimerApiKeyRow, "key_hash">>;
+}
+
+export async function revokePrimerApiKey(id: string, userId: string): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("primer_api_keys").update({ revoked_at: new Date().toISOString() }).eq("id", id).eq("user_id", userId).is("revoked_at", null).select("id").maybeSingle();
+  if (error) throw new Error("Failed to revoke API key.");
+  return Boolean(data);
+}
+
+export async function findActivePrimerApiKey(keyHash: string): Promise<PrimerApiKeyRow | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("primer_api_keys").select("*").eq("key_hash", keyHash).is("revoked_at", null).maybeSingle();
+  if (error) throw new Error("Failed to validate API key.");
+  if (!data) return null;
+  await supabase.from("primer_api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
+  return data as PrimerApiKeyRow;
+}
+
 export type SessionOwner =
   | { userId: string; anonCookieId?: null }
   | { userId: null; anonCookieId: string };

@@ -6,26 +6,53 @@ import Link from "next/link";
 import { Check, ChevronDown, ChevronUp, Copy, Download, FileDown, Pencil, Share2, Trash2, X } from "lucide-react";
 import { ConsentAdSlot } from "../../components/consent-ad-slot";
 import type { FormatterFile, GenerationResult, GenerationVersion, PromptFormat } from "./types";
+import { estimateMonthlyCostNgn, lintPrompt, REGION_PRESETS } from "@primer/engine";
+import type { PromptLintFix, RegionPreset } from "@primer/engine";
 
 export function FormatPicker({ value, onChange }: { value: PromptFormat; onChange: (value: PromptFormat) => void }) {
   return <label className="format-picker"><span>Output format</span><select value={value} onChange={(event) => onChange(event.target.value as PromptFormat)}><option value="generic">Product brief</option><option value="claude-code">Claude Code</option><option value="cursor">Cursor</option><option value="v0">v0 UI brief</option><option value="windsurf">Windsurf</option></select></label>;
 }
 
-export function Onboarding({ onGenerate, disabled, error, format, onFormatChange, initialGoal = "" }: {
+export function Onboarding({ onGenerate, disabled, error, format, onFormatChange, initialGoal = "", region, onRegionChange, lowBandwidth, onLowBandwidthChange }: {
   onGenerate: (input: string) => void; disabled: boolean; error: string | null; format: PromptFormat;
-  onFormatChange: (format: PromptFormat) => void; initialGoal?: string;
+  onFormatChange: (format: PromptFormat) => void; initialGoal?: string; region: RegionPreset;
+  onRegionChange: (region: RegionPreset) => void; lowBandwidth: boolean; onLowBandwidthChange: (enabled: boolean) => void;
 }) {
   const [goal, setGoal] = useState(initialGoal);
   useEffect(() => { if (initialGoal) setGoal(initialGoal); }, [initialGoal]);
   const [constraints, setConstraints] = useState("");
   const [stage, setStage] = useState("");
-  const [showHint, setShowHint] = useState(false);
+  const [step, setStep] = useState<"idea" | "review" | "questions">("idea");
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [lint, setLint] = useState<ReturnType<typeof lintPrompt> | null>(null);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+  const [gettingQuestions, setGettingQuestions] = useState(false);
   const goalRef = useRef<HTMLTextAreaElement>(null);
-  const goalSeemsSpecific = goal.trim().length >= 12;
-  const submit = () => {
+  const originalIdea = [`Goal: ${goal.trim()}`, constraints.trim() ? `Constraints: ${constraints.trim()}` : "", stage.trim() ? `Stage: ${stage.trim()}` : ""].filter(Boolean).join("\n");
+  const estimate = estimateMonthlyCostNgn({ stage, lowBandwidth });
+  const review = () => {
     if (!goal.trim() || disabled) return;
-    if (!goalSeemsSpecific) setShowHint(true);
-    onGenerate([`Goal: ${goal.trim()}`, constraints.trim() ? `Constraints: ${constraints.trim()}` : "", stage.trim() ? `Stage: ${stage.trim()}` : ""].filter(Boolean).join("\n"));
+    setLint(lintPrompt(originalIdea)); setStep("review"); setIntakeError(null);
+  };
+  const addFix = (fix: PromptLintFix) => {
+    setConstraints((value) => [value.trim(), fix.addition].filter(Boolean).join("\n"));
+    setLint(lintPrompt([originalIdea, fix.addition].join("\n")));
+  };
+  const getQuestions = async () => {
+    setGettingQuestions(true); setIntakeError(null);
+    try {
+      const response = await fetch("/api/intake/questions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: originalIdea }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Follow-up questions are unavailable.");
+      setQuestions(data.questions); setAnswers(data.questions.map(() => "")); setStep("questions");
+    } catch (cause) { setIntakeError(cause instanceof Error ? cause.message : "Follow-up questions are unavailable."); }
+    finally { setGettingQuestions(false); }
+  };
+  const submit = () => {
+    if (disabled) return;
+    const clarifications = questions.map((question, index) => answers[index]?.trim() ? `${question}\nAnswer: ${answers[index].trim()}` : "").filter(Boolean);
+    onGenerate([originalIdea, `Launch region: ${region}.`, `Low-bandwidth mode: ${lowBandwidth ? "enabled" : "disabled"}.`, ...clarifications].join("\n\n"));
   };
   return <section className="onboarding card-surface">
     <p className="eyebrow">A clearer start for your next build</p>
@@ -33,15 +60,22 @@ export function Onboarding({ onGenerate, disabled, error, format, onFormatChange
     <p className="lede">Share the goal, any constraints, and where you are today. Primer will shape it into an execution-ready plan.</p>
     <label className="field-label" htmlFor="project-goal">What are you trying to build or achieve?</label>
     <textarea id="project-goal" ref={goalRef} className="text-field goal-field" value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); submit(); } }} placeholder="A web app that helps neighborhood clinics coordinate appointments..." maxLength={4000} />
-    {!goalSeemsSpecific && goal.trim().length > 0 && <p className="soft-hint">A little more detail can improve the recommendations. You can still continue with this idea.</p>}
     <div className="form-grid">
       <label className="field-label">Constraints <span className="optional">Optional</span><input className="text-field" value={constraints} onChange={(event) => setConstraints(event.target.value)} placeholder="Budget, timeline, preferred tools…" /></label>
       <label className="field-label">Project stage <span className="optional">Optional</span><input className="text-field" value={stage} onChange={(event) => setStage(event.target.value)} placeholder="Idea, prototype, existing product…" /></label>
     </div>
     <FormatPicker value={format} onChange={onFormatChange} />
-    {error && <p className="error-message" role="alert">{error}</p>}
-    {showHint && <div className="hint-panel" role="status"><span>Your goal is quite short. More detail may help Primer tailor the plan. Generation can continue with the current idea.</span><button className="button button-secondary" onClick={() => { setShowHint(false); goalRef.current?.focus(); }}>Got it</button></div>}
-    <button className="button button-primary generate-button" onClick={submit} disabled={disabled || !goal.trim()}>{disabled ? "Preparing your plan…" : "Build my project brief"}<span aria-hidden="true">→</span></button>
+    <div className="form-grid">
+      <label className="field-label">Launch region<select className="text-field" value={region} onChange={(event) => onRegionChange(event.target.value as RegionPreset)}>{REGION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select><span className="helper-text">{REGION_PRESETS.find((preset) => preset.id === region)?.payments}</span></label>
+      <label className="field-label low-bandwidth-control"><span><input type="checkbox" checked={lowBandwidth} onChange={(event) => onLowBandwidthChange(event.target.checked)} /> Optimize for low bandwidth</span><span className="helper-text">Prioritize small payloads, resilient loading, and offline-friendly flows.</span></label>
+    </div>
+    <div className="estimate-card"><strong>Planning estimate</strong><span>₦{estimate.min.toLocaleString()}–₦{estimate.max.toLocaleString()} / month</span><small>Indicative infrastructure range; excludes payment fees and varies with traffic, provider, and exchange rates.</small></div>
+    {step === "review" && lint && <div className="lint-panel" aria-live="polite"><div className="lint-score"><strong>{lint.score}</strong><span>/ 100 brief clarity</span></div><p>{lint.fixes.length ? "These details can improve the result. Add any that apply, or continue as-is." : "Your idea has useful scope, audience, and delivery context."}</p>{lint.fixes.map((fix) => <div className="lint-fix" key={fix.id}><div><strong>{fix.title}</strong><small>{fix.detail}</small></div><button className="text-button" onClick={() => addFix(fix)}>Add prompt</button></div>)}<button className="button button-primary" disabled={gettingQuestions} onClick={() => void getQuestions()}>{gettingQuestions ? "Preparing questions…" : "Continue to clarifying questions"}</button></div>}
+    {step === "questions" && <div className="intake-panel"><h2>A few details for a better plan</h2><p className="muted">Answer what you can; every question is optional.</p>{questions.map((question, index) => <label className="field-label" key={`${index}-${question}`}>{question}<textarea className="text-field" rows={2} maxLength={600} value={answers[index] ?? ""} onChange={(event) => setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))} /></label>)}</div>}
+    {(intakeError || error) && <p className="error-message" role="alert">{intakeError ?? error}</p>}
+    {step === "idea" && <button className="button button-primary generate-button" onClick={review} disabled={disabled || !goal.trim()}>Check my idea<span aria-hidden="true">→</span></button>}
+    {step === "review" && <div className="dialog-actions"><button className="button button-secondary" onClick={() => { setStep("idea"); goalRef.current?.focus(); }}>Edit idea</button><button className="button button-secondary" onClick={submit} disabled={disabled}>Skip questions and generate</button></div>}
+    {step === "questions" && <div className="dialog-actions"><button className="button button-secondary" onClick={() => setStep("review")}>Back</button><button className="button button-primary" onClick={submit} disabled={disabled || !goal.trim()}>{disabled ? "Preparing your plan…" : "Build my project brief"}<span aria-hidden="true">→</span></button></div>}
     <p className="helper-text">Press Ctrl/⌘ + Enter to generate.</p>
   </section>;
 }

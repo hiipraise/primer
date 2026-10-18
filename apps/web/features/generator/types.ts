@@ -20,4 +20,4 @@ export interface GenerationVersion extends GenerationResult {
   user_input: string;
   output_prompt: string;
 }
-export interface GenerateInput { input: string; session_id?: string; format: PromptFormat }
+export interface GenerateInput { input: string; session_id?: string; format: PromptFormat; region?: string; low_bandwidth?: boolean }

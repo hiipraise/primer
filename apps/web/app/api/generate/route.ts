@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     }
 
     const result: EngineOutput = await engine.generate({
-      input: body.input,
+      input: `${body.input}\n\n[Deployment preferences]\nLaunch region preset: ${body.region ?? "global"}. Low-bandwidth optimization: ${body.low_bandwidth ? "enabled" : "disabled"}.`,
       session_id: sessionId,
       ip,
       rateLimitChecked: true,

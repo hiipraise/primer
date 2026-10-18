@@ -8,12 +8,15 @@ import { AuthModal } from "../components/auth-modal";
 import { useGenerate } from "../features/generator/use-generate";
 import { Onboarding, RefineBar, ResultView, VersionHistory } from "../features/generator/components";
 import type { GenerationResult, GenerationVersion, PromptFormat } from "../features/generator/types";
+import type { RegionPreset } from "@primer/engine";
 
 export default function Home() {
   const { user } = useAuth();
   const { generate, loading, error, setError, streamedSections } = useGenerate();
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [format, setFormat] = useState<PromptFormat>("generic");
+  const [region, setRegion] = useState<RegionPreset>("nigeria");
+  const [lowBandwidth, setLowBandwidth] = useState(false);
   const [refineDraft, setRefineDraft] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -22,7 +25,7 @@ export default function Home() {
   useEffect(() => { setForkIdea(new URLSearchParams(window.location.search).get("idea")?.slice(0, 4000) ?? ""); }, []);
 
   const submit = useCallback(async (input: string, sessionId?: string) => {
-    const outcome = await generate({ input, session_id: sessionId, format });
+    const outcome = await generate({ input, session_id: sessionId, format, region, low_bandwidth: lowBandwidth });
     if (outcome.capped) { setCapReached(outcome.capped); return; }
     if (outcome.result) {
       setResult(outcome.result);
@@ -30,7 +33,7 @@ export default function Home() {
       setPublishedUrl(null);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [format, generate]);
+  }, [format, generate, lowBandwidth, region]);
 
   const restoreSession = useCallback(async (sessionId: string) => {
     setError(null);
@@ -108,7 +111,7 @@ export default function Home() {
   }, [copy, loading, refine, refineDraft, result]);
 
   return <div className="app-shell">
-    <header className="site-header"><Link className="brand" href="/" aria-label="Primer home">Primer<span className="brand-mark">.</span></Link><div className="header-actions">{result && <button className="button button-secondary" onClick={newChat}><Plus size={15} />New idea</button>}<AuthModal onRestoreSession={restoreSession} /></div></header>
+    <header className="site-header"><Link className="brand" href="/" aria-label="Primer home">Primer<span className="brand-mark">.</span></Link><div className="header-actions"><Link className="text-link" href="/developers">API</Link>{result && <button className="button button-secondary" onClick={newChat}><Plus size={15} />New idea</button>}<AuthModal onRestoreSession={restoreSession} /></div></header>
     <main className={`main-content ${result ? "main-result" : ""}`}>
       {capReached ? <section className="cap-card card-surface"><span className="eyebrow">Free plan</span><h1>You’ve used your {capReached.cap} free generations</h1><p>Sign in from the account menu to continue. Your work stays in this browser until you sign in.</p>{user && <button className="button button-secondary" onClick={() => { setCapReached(null); newChat(); }}>Start a new idea</button>}</section> : result ? <>
         {loading && streamedSections.length > 0 && <div className="stream-progress" aria-live="polite">Updating {streamedSections.slice(-3).map((section) => section.replaceAll("_", " ")).join(" · ")}…</div>}
@@ -119,7 +122,7 @@ export default function Home() {
         <div id="refine"><RefineBar value={refineDraft} onChange={setRefineDraft} onSubmit={refine} disabled={loading} /></div>
       </> : <>
         {user && <p className="signed-in-note">Signed in · your projects are saved to your account</p>}
-        <Onboarding key={forkIdea} initialGoal={forkIdea} format={format} onFormatChange={setFormat} onGenerate={(input) => void submit(input)} disabled={loading} error={error} />
+        <Onboarding key={forkIdea} initialGoal={forkIdea} format={format} onFormatChange={setFormat} onGenerate={(input) => void submit(input)} disabled={loading} error={error} region={region} onRegionChange={setRegion} lowBandwidth={lowBandwidth} onLowBandwidthChange={setLowBandwidth} />
         {loading && <section className="generation-skeleton" aria-live="polite" aria-busy="true"><div className="skeleton-line wide" /><div className="skeleton-line" /><p>Building sections{streamedSections.length ? ` · ${streamedSections.slice(-2).join(" · ")}` : "…"}</p><div className="skeleton-block" /></section>}
       </>}
     </main>

@@ -25,20 +25,21 @@ The browser uses Supabase Auth through server-managed cookies. Application sessi
 
 ## Data model
 
-The database migrations create four tables:
+The database migrations create five tables:
 
 | Table | Purpose | Main relationships and fields |
 | --- | --- | --- |
 | `anon_sessions` | Anonymous usage tracked by the `primer_anon_id` cookie | `cookie_id` is unique; `generations_used` tracks usage |
 | `sessions` | A user's idea and its refinement history | `user_id` for signed-in ownership or `anon_cookie_id` for anonymous ownership; has title and timestamps |
 | `generations` | One generated version in a session | `session_id` references `sessions`; stores input, formatted prompt, stack/tools/skills JSON, format, structured spec, change summary, and version number |
+| `primer_api_keys` | Signed-in developer API credentials | Stores a one-way key hash and owner; only the service role accesses it |
 | `public_prompts` | A published generation in the public library | `generation_id` references `generations`; stores slug, title, summary, stack summary, visibility, and view count |
 
 Row-level security is enabled for application tables. Anonymous session bookkeeping is server-managed; the service-role key is only used in server code. Review each migration before applying it to a database.
 
 ## Database migrations
 
-Apply all seven SQL files, in numerical order, to a new Supabase project:
+Apply all nine SQL files, in numerical order, to a new Supabase project. Apply migration 009 after the existing migrations:
 
 1. [`001_auth_tables.sql`](packages/db/migrations/001_auth_tables.sql) â€” creates anonymous sessions, sessions, generations, indexes, and initial RLS policies.
 2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) â€” historical anonymous access policy update, tightened by migration 006.
@@ -49,7 +50,10 @@ Apply all seven SQL files, in numerical order, to a new Supabase project:
 
 7. [`007_engine_v2_spec.sql`](packages/db/migrations/007_engine_v2_spec.sql) â€” stores structured engine specifications and per-version change summaries.
 
-For an existing installation that has already applied migrations 001â€“005, review and apply only migration 006. It changes RLS policies and installs the quota functions; it does not delete application data.
+8. [`008_public_library.sql`](packages/db/migrations/008_public_library.sql) adds public library tags and moderation fields.
+9. [`009_api_keys.sql`](packages/db/migrations/009_api_keys.sql) creates private storage for hashed API keys.
+
+For an existing installation, apply only migrations that have not already run, in numerical order. Migration 009 only adds API key storage.
 
 Run each file in order with the Supabase SQL Editor, or link the project and use the Supabase CLI migration workflow. Do not re-run these files on a database that already has them applied.
 
@@ -68,7 +72,7 @@ cd primer
 pnpm install
 ```
 
-Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all seven migrations to Supabase, then start the app:
+Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all nine migrations to Supabase, then start the app:
 
 ```sh
 pnpm dev
@@ -99,6 +103,14 @@ Open <http://localhost:3000>. To enable Google sign-in, enable Google under Supa
 ## Privacy and optional services
 
 A first-party consent banner keeps advertising, Cloudflare Web Analytics, and Sentry disabled until a visitor allows optional services. The choice is saved in the `primer_consent` cookie and can be changed with Privacy settings. Privacy, terms, and cookie details are available at `/privacy`, `/terms`, and `/cookies`.
+
+## Growth tools
+
+The intake flow scores idea clarity and offers optional prompt improvements before asking 3–6 tailored follow-up questions. Region preferences include Nigeria payment options and low-bandwidth requirements. Monthly NGN ranges are planning estimates, not provider quotes.
+
+Signed-in users can create and revoke API keys at `/developers`. A key is shown once and only its SHA-256 hash is stored. The public endpoint is `POST /api/v1/generate` with a Bearer key and a JSON body containing `input` (up to 4,000 characters), plus optional `format`, `region` and `low_bandwidth`. Each key is independently rate limited. API generation is stateless and does not create a saved session.
+
+The dependency-free Node.js CLI is in `packages/cli`. Set `PRIMER_API_KEY`, then use `primer generate --input "Build a clinic app" --region nigeria --low-bandwidth`; optionally set `PRIMER_API_URL` for a self-hosted Primer endpoint.
 
 ## API reference
 

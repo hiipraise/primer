@@ -27,6 +27,10 @@ export {
   listPublicPrompts,
   getPublicPromptSitemapEntries,
   reportPublicPrompt,
+  createPrimerApiKey,
+  listPrimerApiKeys,
+  revokePrimerApiKey,
+  findActivePrimerApiKey,
 } from "./sessions";
 
-export type { SessionRow, GenerationRow, PublicPromptRow, SessionOwner } from "./sessions";
+export type { SessionRow, GenerationRow, PublicPromptRow, SessionOwner, PrimerApiKeyRow } from "./sessions";

@@ -7,7 +7,12 @@ export const generateBodySchema = z.object({
   input: z.string().trim().min(1).max(4000),
   session_id: uuidSchema.optional(),
   format: formatSchema.optional(),
+  region: z.enum(["global", "nigeria", "squad"]).optional(),
+  low_bandwidth: z.boolean().optional(),
 }).strict();
+
+export const intakeBodySchema = z.object({ input: z.string().trim().min(1).max(4000) }).strict();
+export const apiKeyBodySchema = z.object({ name: z.string().trim().min(1).max(60) }).strict();
 
 export const generationsQuerySchema = z.object({
   session_id: uuidSchema,

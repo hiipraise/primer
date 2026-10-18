@@ -1,0 +1,11 @@
+{
+  "name": "@primer/cli",
+  "version": "0.1.0",
+  "private": false,
+  "files": ["bin", "src"],
+  "engines": { "node": ">=20" },
+  "type": "module",
+  "bin": { "primer": "./bin/primer.js" },
+  "scripts": { "typecheck": "node --check src/client.js && node --check src/args.js && node --check bin/primer.js", "lint": "eslint src bin --max-warnings 0", "test": "vitest run" },
+  "devDependencies": { "@primer/config": "workspace:*" }
+}
