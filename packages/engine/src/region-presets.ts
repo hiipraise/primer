@@ -6,12 +6,14 @@ export const REGION_PRESETS = [
 
 export type RegionPreset = typeof REGION_PRESETS[number]["id"];
 
-export function estimateMonthlyCostNgn(options: { stage?: string; lowBandwidth?: boolean } = {}) {
+export function estimateMonthlyCostNgn(options: { stage?: string; lowBandwidth?: boolean; usdNgnRate?: number } = {}) {
   const stage = (options.stage ?? "mvp").toLowerCase();
   let range = stage.includes("scale") || stage.includes("production")
     ? { min: 150_000, max: 650_000 }
     : stage.includes("prototype") || stage.includes("idea")
       ? { min: 0, max: 25_000 }
       : { min: 35_000, max: 150_000 };
-  return { ...range, currency: "NGN" as const, period: "month" as const, estimate: true as const };
+  const configuredRate = options.usdNgnRate ?? Number(process.env.NEXT_PUBLIC_USD_NGN_ESTIMATE_RATE);
+  const usdNgnRate = Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : 1_500;
+  return { ...range, usdMin: Math.round(range.min / usdNgnRate), usdMax: Math.round(range.max / usdNgnRate), usdNgnRate, currency: "NGN" as const, period: "month" as const, estimate: true as const };
 }

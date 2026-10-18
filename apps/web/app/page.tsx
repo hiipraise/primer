@@ -6,13 +6,13 @@ import { ArrowDown, Plus } from "lucide-react";
 import { useAuth } from "../components/auth-provider";
 import { AuthModal } from "../components/auth-modal";
 import { useGenerate } from "../features/generator/use-generate";
-import { Onboarding, RefineBar, ResultView, VersionHistory } from "../features/generator/components";
+import { Onboarding, RefineBar, ResultView, StreamedPreview, VersionHistory } from "../features/generator/components";
 import type { GenerationResult, GenerationVersion, PromptFormat } from "../features/generator/types";
 import type { RegionPreset } from "@primer/engine";
 
 export default function Home() {
   const { user } = useAuth();
-  const { generate, loading, error, setError, streamedSections } = useGenerate();
+  const { generate, loading, error, setError, streamedSections, streamedContent } = useGenerate();
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [format, setFormat] = useState<PromptFormat>("generic");
   const [region, setRegion] = useState<RegionPreset>("nigeria");
@@ -115,6 +115,7 @@ export default function Home() {
     <main className={`main-content ${result ? "main-result" : ""}`}>
       {capReached ? <section className="cap-card card-surface"><span className="eyebrow">Free plan</span><h1>You’ve used your {capReached.cap} free generations</h1><p>Sign in from the account menu to continue. Your work stays in this browser until you sign in.</p>{user && <button className="button button-secondary" onClick={() => { setCapReached(null); newChat(); }}>Start a new idea</button>}</section> : result ? <>
         {loading && streamedSections.length > 0 && <div className="stream-progress" aria-live="polite">Updating {streamedSections.slice(-3).map((section) => section.replaceAll("_", " ")).join(" · ")}…</div>}
+        {loading && <StreamedPreview sections={streamedContent} />}
         {error && <p className="error-message" role="alert">{error}</p>}
         <VersionHistory result={result} onSelect={selectVersion} onRename={rename} onDelete={removeSession} />
         <ResultView result={result} copied={copied} onCopy={copy} publishedUrl={publishedUrl} onPublish={publish} />
@@ -123,7 +124,7 @@ export default function Home() {
       </> : <>
         {user && <p className="signed-in-note">Signed in · your projects are saved to your account</p>}
         <Onboarding key={forkIdea} initialGoal={forkIdea} format={format} onFormatChange={setFormat} onGenerate={(input) => void submit(input)} disabled={loading} error={error} region={region} onRegionChange={setRegion} lowBandwidth={lowBandwidth} onLowBandwidthChange={setLowBandwidth} />
-        {loading && <section className="generation-skeleton" aria-live="polite" aria-busy="true"><div className="skeleton-line wide" /><div className="skeleton-line" /><p>Building sections{streamedSections.length ? ` · ${streamedSections.slice(-2).join(" · ")}` : "…"}</p><div className="skeleton-block" /></section>}
+        {loading && <section className="generation-skeleton" aria-live="polite" aria-busy="true"><div className="skeleton-line wide" /><div className="skeleton-line" /><p>Building sections{streamedSections.length ? ` · ${streamedSections.slice(-2).join(" · ")}` : "…"}</p><div className="skeleton-block" /><StreamedPreview sections={streamedContent} /></section>}
       </>}
     </main>
     <footer className="site-footer">Primer · Think it through, then build.</footer>

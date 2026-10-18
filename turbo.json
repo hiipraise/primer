@@ -8,7 +8,30 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**"],
-      "env": ["GROQ_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "ADS_ENABLED", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "ANON_GENERATION_CAP"]
+      "env": [
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "GROQ_MAX_TOKENS",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "NEXT_PUBLIC_SITE_URL",
+        "NEXT_PUBLIC_ADS_ENABLED",
+        "NEXT_PUBLIC_AD_PROVIDER",
+        "NEXT_PUBLIC_AD_SCRIPT_URL",
+        "NEXT_PUBLIC_ADSENSE_CLIENT_ID",
+        "NEXT_PUBLIC_ADSENSE_SLOT_GENERATION_RESULT",
+        "NEXT_PUBLIC_ADSENSE_SLOT_PUBLIC_PROMPT_SIDEBAR",
+        "NEXT_PUBLIC_ADSENSE_SLOT_EXPLORE_SIDEBAR",
+        "ADSENSE_PUBLISHER_ID",
+        "ADS_TXT_CONTENT",
+        "NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN",
+        "NEXT_PUBLIC_SENTRY_DSN",
+        "NEXT_PUBLIC_USD_NGN_ESTIMATE_RATE",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "ANON_GENERATION_CAP"
+      ]
     },
     "lint": {},
     "typecheck": {},

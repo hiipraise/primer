@@ -39,7 +39,7 @@ Row-level security is enabled for application tables. Anonymous session bookkeep
 
 ## Database migrations
 
-Apply all nine SQL files, in numerical order, to a new Supabase project. Apply migration 009 after the existing migrations:
+Apply all ten SQL files, in numerical order, to a new Supabase project:
 
 1. [`001_auth_tables.sql`](packages/db/migrations/001_auth_tables.sql) â€” creates anonymous sessions, sessions, generations, indexes, and initial RLS policies.
 2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) â€” historical anonymous access policy update, tightened by migration 006.
@@ -52,8 +52,9 @@ Apply all nine SQL files, in numerical order, to a new Supabase project. Apply m
 
 8. [`008_public_library.sql`](packages/db/migrations/008_public_library.sql) adds public library tags and moderation fields.
 9. [`009_api_keys.sql`](packages/db/migrations/009_api_keys.sql) creates private storage for hashed API keys.
+10. [`010_hide_moderated_prompts.sql`](packages/db/migrations/010_hide_moderated_prompts.sql) ensures flagged and hidden publications are not directly selectable.
 
-For an existing installation, apply only migrations that have not already run, in numerical order. Migration 009 only adds API key storage.
+For an existing installation, apply only migrations that have not already run, in numerical order. Migrations 009 and 010 add API-key storage and tighten public visibility for moderated prompts.
 
 Run each file in order with the Supabase SQL Editor, or link the project and use the Supabase CLI migration workflow. Do not re-run these files on a database that already has them applied.
 
@@ -72,7 +73,7 @@ cd primer
 pnpm install
 ```
 
-Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all nine migrations to Supabase, then start the app:
+Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all ten migrations to Supabase, then start the app:
 
 ```sh
 pnpm dev
@@ -99,6 +100,7 @@ Open <http://localhost:3000>. To enable Google sign-in, enable Google under Supa
 | `UPSTASH_REDIS_REST_URL` | Production | Upstash Redis REST endpoint used by the generation rate limiter |
 | `UPSTASH_REDIS_REST_TOKEN` | Production | Server-only Upstash Redis REST token |
 | `ANON_GENERATION_CAP` | No | Anonymous generation quota; defaults to `3` |
+| `NEXT_PUBLIC_USD_NGN_ESTIMATE_RATE` | No | Planning conversion rate for NGN cost estimates shown in USD; defaults to `1,500` |
 
 ## Privacy and optional services
 
@@ -106,7 +108,7 @@ A first-party consent banner keeps advertising, Cloudflare Web Analytics, and Se
 
 ## Growth tools
 
-The intake flow scores idea clarity and offers optional prompt improvements before asking 3–6 tailored follow-up questions. Region preferences include Nigeria payment options and low-bandwidth requirements. Monthly NGN ranges are planning estimates, not provider quotes.
+The intake flow scores idea clarity and offers optional prompt improvements before asking 3–6 tailored follow-up questions. Region preferences include Nigeria payment options and low-bandwidth requirements. Monthly NGN ranges are planning estimates, not provider quotes. USD equivalents use `NEXT_PUBLIC_USD_NGN_ESTIMATE_RATE` (default 1,500 NGN/USD), an editable planning assumption rather than a live exchange rate.
 
 Signed-in users can create and revoke API keys at `/developers`. A key is shown once and only its SHA-256 hash is stored. The public endpoint is `POST /api/v1/generate` with a Bearer key and a JSON body containing `input` (up to 4,000 characters), plus optional `format`, `region` and `low_bandwidth`. Each key is independently rate limited. API generation is stateless and does not create a saved session.
 

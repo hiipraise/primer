@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 
 let providerScriptPromise: Promise<void> | null = null;
 function loadProviderScript(src: string, clientId?: string): Promise<void> {
@@ -51,7 +50,7 @@ export function AdSlot({
   const [inView, setInView] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
-  const dimensions: CSSProperties = useMemo(() => ({ width, height, minWidth: 0, maxWidth: "100%", overflow: "hidden" }), [width, height]);
+  const size = `${width}x${height}`;
 
   useEffect(() => {
     if (!canRender) initialized.current = false;
@@ -85,8 +84,8 @@ export function AdSlot({
   }, [canRender, clientId, inView, provider, scriptUrl]);
 
   if (!enabled) return null;
-  return <div ref={host} data-ad-position={position} className="primer-ad-slot" style={dimensions} aria-label={canRender ? "Advertisement" : undefined} aria-hidden={!canRender}>
-    {canRender && inView && provider === "adsense" && <ins className="adsbygoogle" style={{ display: "block", width: "100%", height: "100%" }} data-ad-client={clientId} data-ad-slot={slot} data-ad-format="auto" data-full-width-responsive="true" />}
-    {canRender && inView && provider !== "adsense" && <div className="primer-custom-ad" data-ad-provider={provider} data-ad-position={position} style={{ width: "100%", height: "100%" }} />}
+  return <div ref={host} data-ad-position={position} data-ad-size={size} className="primer-ad-slot" aria-label={canRender ? "Advertisement" : undefined} aria-hidden={!canRender}>
+    {canRender && inView && provider === "adsense" && <ins className="adsbygoogle" data-ad-client={clientId} data-ad-slot={slot} data-ad-format="auto" data-full-width-responsive="true" />}
+    {canRender && inView && provider !== "adsense" && <div className="primer-custom-ad" data-ad-provider={provider} data-ad-position={position} />}
   </div>;
 }

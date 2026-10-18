@@ -13,6 +13,18 @@ export function FormatPicker({ value, onChange }: { value: PromptFormat; onChang
   return <label className="format-picker"><span>Output format</span><select value={value} onChange={(event) => onChange(event.target.value as PromptFormat)}><option value="generic">Product brief</option><option value="claude-code">Claude Code</option><option value="cursor">Cursor</option><option value="v0">v0 UI brief</option><option value="windsurf">Windsurf</option></select></label>;
 }
 
+export function StreamedPreview({ sections }: { sections: Record<string, unknown> }) {
+  const entries = Object.entries(sections);
+  if (!entries.length) return null;
+  return <section className="streamed-preview" aria-live="polite" aria-label="Generated project sections">
+    <span className="eyebrow">Generated so far</span>
+    <div className="streamed-preview-grid">{entries.map(([name, value]) => <article className="streamed-preview-item" key={name}>
+      <h2>{name.replaceAll("_", " ")}</h2>
+      {typeof value === "string" ? <p>{value}</p> : Array.isArray(value) ? <ul>{value.map((item, index) => <li key={index}>{typeof item === "string" ? item : typeof item === "object" && item !== null ? [("name" in item ? String(item.name) : ""), ("description" in item ? String(item.description) : ""), ("reason" in item ? String(item.reason) : "")].filter(Boolean).join(" — ") : String(item)}</li>)}</ul> : <pre>{JSON.stringify(value, null, 2)}</pre>}
+    </article>)}</div>
+  </section>;
+}
+
 export function Onboarding({ onGenerate, disabled, error, format, onFormatChange, initialGoal = "", region, onRegionChange, lowBandwidth, onLowBandwidthChange }: {
   onGenerate: (input: string) => void; disabled: boolean; error: string | null; format: PromptFormat;
   onFormatChange: (format: PromptFormat) => void; initialGoal?: string; region: RegionPreset;
@@ -69,7 +81,7 @@ export function Onboarding({ onGenerate, disabled, error, format, onFormatChange
       <label className="field-label">Launch region<select className="text-field" value={region} onChange={(event) => onRegionChange(event.target.value as RegionPreset)}>{REGION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select><span className="helper-text">{REGION_PRESETS.find((preset) => preset.id === region)?.payments}</span></label>
       <label className="field-label low-bandwidth-control"><span><input type="checkbox" checked={lowBandwidth} onChange={(event) => onLowBandwidthChange(event.target.checked)} /> Optimize for low bandwidth</span><span className="helper-text">Prioritize small payloads, resilient loading, and offline-friendly flows.</span></label>
     </div>
-    <div className="estimate-card"><strong>Planning estimate</strong><span>₦{estimate.min.toLocaleString()}–₦{estimate.max.toLocaleString()} / month</span><small>Indicative infrastructure range; excludes payment fees and varies with traffic, provider, and exchange rates.</small></div>
+    <div className="estimate-card"><strong>Planning estimate</strong><span>₦{estimate.min.toLocaleString()}–₦{estimate.max.toLocaleString()} / month</span><span className="estimate-usd">About ${estimate.usdMin.toLocaleString()}–${estimate.usdMax.toLocaleString()} / month</span><small>Indicative infrastructure range. USD is converted at ₦{estimate.usdNgnRate.toLocaleString()}/USD; configure the planning rate in the environment. Excludes payment fees and varies with traffic and provider.</small></div>
     {step === "review" && lint && <div className="lint-panel" aria-live="polite"><div className="lint-score"><strong>{lint.score}</strong><span>/ 100 brief clarity</span></div><p>{lint.fixes.length ? "These details can improve the result. Add any that apply, or continue as-is." : "Your idea has useful scope, audience, and delivery context."}</p>{lint.fixes.map((fix) => <div className="lint-fix" key={fix.id}><div><strong>{fix.title}</strong><small>{fix.detail}</small></div><button className="text-button" onClick={() => addFix(fix)}>Add prompt</button></div>)}<button className="button button-primary" disabled={gettingQuestions} onClick={() => void getQuestions()}>{gettingQuestions ? "Preparing questions…" : "Continue to clarifying questions"}</button></div>}
     {step === "questions" && <div className="intake-panel"><h2>A few details for a better plan</h2><p className="muted">Answer what you can; every question is optional.</p>{questions.map((question, index) => <label className="field-label" key={`${index}-${question}`}>{question}<textarea className="text-field" rows={2} maxLength={600} value={answers[index] ?? ""} onChange={(event) => setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))} /></label>)}</div>}
     {(intakeError || error) && <p className="error-message" role="alert">{intakeError ?? error}</p>}

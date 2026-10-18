@@ -5,6 +5,7 @@ const { findKey, rateLimit, generate } = vi.hoisted(() => ({
 }));
 vi.mock("@primer/db", () => ({ findActivePrimerApiKey: findKey }));
 vi.mock("@primer/engine", () => ({
+  estimateMonthlyCostNgn: () => ({ min: 35_000, max: 150_000, usdMin: 23, usdMax: 100, currency: "NGN", period: "month", estimate: true }),
   getEngine: () => ({ checkRateLimit: rateLimit, generate }),
   RateLimitError: class RateLimitError extends Error { retryAfter = 30; resetAt = Date.now() + 30_000; },
 }));
@@ -30,6 +31,7 @@ describe("POST /api/v1/generate", () => {
       body: JSON.stringify({ input: "Build a clinic app", region: "nigeria", low_bandwidth: true }),
     }));
     expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ estimated_monthly_cost: { currency: "NGN", usdMin: 23, usdMax: 100 } });
     expect(rateLimit).toHaveBeenCalledWith("api-key:key-123");
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({ rateLimitChecked: true, input: expect.stringContaining("nigeria") }));
   });

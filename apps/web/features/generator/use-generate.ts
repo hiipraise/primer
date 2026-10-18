@@ -11,7 +11,7 @@ interface ApiResponse extends Partial<GenerationResult> {
 }
 export interface GenerateOutcome { result?: GenerationResult; capped?: { used: number; cap: number } }
 
-async function readSse(response: Response, onSection: (name: string) => void): Promise<ApiResponse> {
+async function readSse(response: Response, onSection: (name: string, value: unknown) => void): Promise<ApiResponse> {
   if (!response.ok) return response.json() as Promise<ApiResponse>;
   if (!response.body) throw new Error("Generation stream was unavailable.");
   const reader = response.body.getReader();
@@ -27,8 +27,8 @@ async function readSse(response: Response, onSection: (name: string) => void): P
       const event = eventFrame.match(/^event:\s*(.+)$/m)?.[1];
       const data = eventFrame.match(/^data:\s*(.+)$/m)?.[1];
       if (!event || !data) continue;
-      const payload = JSON.parse(data) as ApiResponse & { section?: string };
-      if (event === "section" && payload.section) onSection(payload.section);
+      const payload = JSON.parse(data) as ApiResponse & { section?: string; value?: unknown };
+      if (event === "section" && payload.section) onSection(payload.section, payload.value);
       if (event === "complete") complete = payload;
       if (event === "error") throw new Error(payload.error ?? "Generation failed.");
     }
@@ -42,18 +42,23 @@ export function useGenerate() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamedSections, setStreamedSections] = useState<string[]>([]);
+  const [streamedContent, setStreamedContent] = useState<Record<string, unknown>>({});
 
   const generate = useCallback(async (input: GenerateInput): Promise<GenerateOutcome> => {
     setLoading(true);
     setError(null);
     setStreamedSections([]);
+    setStreamedContent({});
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      const data = await readSse(response, (section) => setStreamedSections((current) => [...current, section]));
+      const data = await readSse(response, (section, value) => {
+        setStreamedSections((current) => [...current, section]);
+        setStreamedContent((current) => ({ ...current, [section]: value }));
+      });
       if (response.status === 403 && data.code === "ANON_CAP_REACHED") {
         return { capped: { used: data.used ?? 0, cap: data.cap ?? 3 } };
       }
@@ -82,5 +87,5 @@ export function useGenerate() {
     }
   }, []);
 
-  return { generate, loading, error, setError, streamedSections };
+  return { generate, loading, error, setError, streamedSections, streamedContent };
 }

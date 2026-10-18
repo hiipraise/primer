@@ -7,18 +7,11 @@ export function CopyPrompt({ prompt }: { prompt: string }) {
 
   return (
     <button
+      className="copy-public-prompt"
       onClick={() => {
         navigator.clipboard.writeText(prompt).catch(() => {});
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
-      }}
-      style={{
-        background: "#2F6F62",
-        color: "#EDF3F1",
-        border: 0,
-        borderRadius: 6,
-        padding: "9px 14px",
-        cursor: "pointer",
       }}
     >
       {copied ? "Copied" : "Copy prompt"}
