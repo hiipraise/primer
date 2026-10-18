@@ -16,6 +16,7 @@ export function Onboarding({ onGenerate, disabled, error, format, onFormatChange
   onFormatChange: (format: PromptFormat) => void; initialGoal?: string;
 }) {
   const [goal, setGoal] = useState(initialGoal);
+  useEffect(() => { if (initialGoal) setGoal(initialGoal); }, [initialGoal]);
   const [constraints, setConstraints] = useState("");
   const [stage, setStage] = useState("");
   const [showHint, setShowHint] = useState(false);
@@ -73,13 +74,15 @@ export function AccessibleDialog({ title, children, onClose, labelledBy }: { tit
   return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="dialog-card" role="dialog" aria-modal="true" aria-label={labelledBy ? undefined : title} aria-labelledby={labelledBy} ref={ref}><div className="dialog-heading"><h2 id={labelledBy}>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={17} /></button></div>{children}</section></div>;
 }
 
-export function PublishPanel({ result, publishedUrl, onPublish }: { result: GenerationResult; publishedUrl: string | null; onPublish: () => Promise<void> }) {
+export function PublishPanel({ result, publishedUrl, onPublish }: { result: GenerationResult; publishedUrl: string | null; onPublish: (details: { title: string; summary: string; is_public: boolean }) => Promise<void> }) {
+  const suggestedSummary = typeof result.spec?.summary === "string" ? result.spec.summary : "A project brief with a practical stack and implementation plan.";
   const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(suggestedSummary.split(/[.!?]/)[0]?.slice(0, 100) || "Project brief");
+  const [summary, setSummary] = useState(suggestedSummary.slice(0, 500));
   const [busy, setBusy] = useState(false);
-  const publish = async () => { setBusy(true); try { await onPublish(); setOpen(false); } finally { setBusy(false); } };
-  return <><button className="button button-secondary" onClick={() => setOpen(true)} disabled={!result.generation_id}><Share2 size={15} />{publishedUrl ? "Shared" : "Share"}</button>{publishedUrl && <Link className="text-link" href={publishedUrl}>Open public page</Link>}{open && <AccessibleDialog title="Share this project brief" onClose={() => setOpen(false)}><p className="dialog-copy">Publishing makes this generated brief visible in Primer’s public library.</p><div className="dialog-actions"><button className="button button-secondary" onClick={() => setOpen(false)}>Cancel</button><button className="button button-primary" onClick={publish} disabled={busy}>{busy ? "Publishing…" : "Publish brief"}</button></div></AccessibleDialog>}</>;
+  const publish = async (is_public = true) => { setBusy(true); try { await onPublish({ title, summary, is_public }); setOpen(false); } finally { setBusy(false); } };
+  return <><button className="button button-secondary" onClick={() => setOpen(true)} disabled={!result.generation_id}><Share2 size={15} />{publishedUrl ? "Edit publication" : "Share"}</button>{publishedUrl && <Link className="text-link" href={publishedUrl}>Open public page</Link>}{open && <AccessibleDialog title="Share this project brief" onClose={() => setOpen(false)}><p className="dialog-copy">Edit the public title and summary before publishing.</p><label className="field-label">Title<input className="text-field" value={title} maxLength={100} onChange={(event) => setTitle(event.target.value)} /></label><label className="field-label">Summary<textarea className="text-field" value={summary} maxLength={500} onChange={(event) => setSummary(event.target.value)} rows={4} /></label><div className="dialog-actions"><button className="button button-secondary" onClick={() => setOpen(false)}>Cancel</button>{publishedUrl && <button className="button button-secondary" onClick={() => void publish(false)} disabled={busy}>{busy ? "Saving?" : "Unpublish"}</button>}<button className="button button-primary" onClick={() => void publish()} disabled={busy || !title.trim() || !summary.trim()}>{busy ? "Publishing?" : publishedUrl ? "Save changes" : "Publish brief"}</button></div></AccessibleDialog>}</>;
 }
-
 function crc32(bytes: Uint8Array) {
   let crc = 0xffffffff;
   for (const byte of bytes) { crc ^= byte; for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); }
@@ -105,7 +108,7 @@ function makeZip(files: FormatterFile[]) {
   return new Blob([archive.buffer], { type: "application/zip" });
 }
 
-export function ResultView({ result, copied, onCopy, publishedUrl, onPublish }: { result: GenerationResult; copied: string | null; onCopy: (text: string, key: string) => void; publishedUrl: string | null; onPublish: () => Promise<void> }) {
+export function ResultView({ result, copied, onCopy, publishedUrl, onPublish }: { result: GenerationResult; copied: string | null; onCopy: (text: string, key: string) => void; publishedUrl: string | null; onPublish: (details: { title: string; summary: string; is_public: boolean }) => Promise<void> }) {
   const [expanded, setExpanded] = useState(true);
   const files = result.files ?? [];
   const downloadZip = () => { const url = URL.createObjectURL(makeZip(files)); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "primer-project-files.zip"; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 30_000); };

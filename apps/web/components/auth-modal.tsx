@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useAuth, type User as AuthUser } from "./auth-provider";
 import { X, User as UserIcon } from "lucide-react";
 
@@ -301,9 +302,12 @@ function ProfileCard({
         }}
       >
         {user.avatar_url ? (
-          <img
+          <Image
             src={user.avatar_url}
             alt={user.name}
+            width={30}
+            height={30}
+            unoptimized
             style={{
               width: "30px",
               height: "30px",
@@ -610,9 +614,12 @@ export function AuthModal({
           />
         ) : user ? (
           user.avatar_url ? (
-            <img
+            <Image
               src={user.avatar_url}
               alt={user.name}
+              width={26}
+              height={26}
+              unoptimized
               style={{
                 width: "26px",
                 height: "26px",

@@ -4,6 +4,7 @@ import { AuthProvider } from "../components/auth-provider";
 import { Analytics } from "../components/analytics";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://primer.build"),
   title: "Primer",
   description:
     "Describe what you want to build. Primer hands you the stack, the tools, and a senior-level execution-ready prompt — refined through conversation, saved forever, ready to paste into any AI platform.",

@@ -18,6 +18,8 @@ export default function Home() {
   const [copied, setCopied] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [capReached, setCapReached] = useState<{ used: number; cap: number } | null>(null);
+  const [forkIdea, setForkIdea] = useState("");
+  useEffect(() => { setForkIdea(new URLSearchParams(window.location.search).get("idea")?.slice(0, 4000) ?? ""); }, []);
 
   const submit = useCallback(async (input: string, sessionId?: string) => {
     const outcome = await generate({ input, session_id: sessionId, format });
@@ -38,6 +40,9 @@ export default function Home() {
       const data = await response.json();
       const latest = data.generations?.[data.generations.length - 1];
       if (!latest) throw new Error("This session has no saved generations.");
+      const publicationResponse = await fetch(`/api/generations/${latest.id}/publish`);
+      const publication = publicationResponse.ok ? (await publicationResponse.json()).prompt : null;
+      setPublishedUrl(publication?.is_public ? `/p/${publication.slug}` : null);
       setResult({
         prompt: latest.output_prompt, generation_id: latest.id, stack: latest.stack ?? [],
         tools: latest.tools ?? [], skills: latest.skills ?? [], session_id: sessionId,
@@ -56,16 +61,14 @@ export default function Home() {
     catch { setError("Clipboard access is unavailable in this browser."); }
   }, [setError]);
 
-  const publish = useCallback(async () => {
+  const publish = useCallback(async (details: { title: string; summary: string; is_public: boolean }) => {
     if (!result?.generation_id) return;
     try {
-      const response = await fetch(`/api/generations/${result.generation_id}/publish`, { method: "POST" });
+      const response = await fetch(`/api/generations/${result.generation_id}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(details) });
       if (!response.ok) { setError("This brief could not be published."); return; }
       const data = await response.json();
-      setPublishedUrl(`/p/${data.prompt.slug}`);
-    } catch {
-      setError("This brief could not be published.");
-    }
+      setPublishedUrl(details.is_public ? `/p/${data.prompt.slug}` : null);
+    } catch { setError("This brief could not be published."); }
   }, [result, setError]);
 
   const rename = useCallback(async (title: string) => {
@@ -116,7 +119,7 @@ export default function Home() {
         <div id="refine"><RefineBar value={refineDraft} onChange={setRefineDraft} onSubmit={refine} disabled={loading} /></div>
       </> : <>
         {user && <p className="signed-in-note">Signed in · your projects are saved to your account</p>}
-        <Onboarding format={format} onFormatChange={setFormat} onGenerate={(input) => void submit(input)} disabled={loading} error={error} />
+        <Onboarding key={forkIdea} initialGoal={forkIdea} format={format} onFormatChange={setFormat} onGenerate={(input) => void submit(input)} disabled={loading} error={error} />
         {loading && <section className="generation-skeleton" aria-live="polite" aria-busy="true"><div className="skeleton-line wide" /><div className="skeleton-line" /><p>Building sections{streamedSections.length ? ` · ${streamedSections.slice(-2).join(" · ")}` : "…"}</p><div className="skeleton-block" /></section>}
       </>}
     </main>

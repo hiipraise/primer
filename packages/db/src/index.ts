@@ -23,7 +23,10 @@ export {
   publishGeneration,
   hasOwnedGeneration,
   getPublicPrompt,
+  getOwnedPublicPrompt,
   listPublicPrompts,
+  getPublicPromptSitemapEntries,
+  reportPublicPrompt,
 } from "./sessions";
 
 export type { SessionRow, GenerationRow, PublicPromptRow, SessionOwner } from "./sessions";

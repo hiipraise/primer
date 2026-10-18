@@ -9,13 +9,14 @@ export async function GET(request: Request) {
     page: searchParams.get("page") ?? undefined,
     limit: searchParams.get("limit") ?? undefined,
     tag: searchParams.get("tag") ?? undefined,
+    search: searchParams.get("search") ?? undefined,
   });
   if (!query.success) return NextResponse.json({ error: "Invalid query parameters.", code: "INVALID_QUERY" }, { status: 400 });
 
   const page = Math.min(parsePage(query.data.page, 1, 1_000_000), 1_000_000);
   const limit = parsePage(query.data.limit, 20, 50);
   try {
-    const prompts = await listPublicPrompts({ page, limit, tag: query.data.tag });
+    const prompts = await listPublicPrompts({ page, limit, tag: query.data.tag, search: query.data.search });
     return NextResponse.json({ prompts, page, limit, has_more: prompts.length === limit });
   } catch (error) {
     return internalError("api/explore", error, "EXPLORE_FETCH_FAILED");

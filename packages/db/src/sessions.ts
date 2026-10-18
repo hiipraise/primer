@@ -35,6 +35,9 @@ export interface PublicPromptRow {
   stack_summary: string;
   is_public: boolean;
   view_count: number;
+  tags: string[];
+  moderation_status: "visible" | "flagged" | "hidden";
+  report_count: number;
   created_at: string;
   generation?: GenerationRow;
 }
@@ -427,41 +430,43 @@ export async function createGeneration(params: {
 export async function publishGeneration(params: {
   generationId: string;
   isPublic: boolean;
+  title: string;
+  summary: string;
   owner: SessionOwner;
 }): Promise<PublicPromptRow> {
   const supabase = await getOwnerClient(params.owner);
   let generationQuery = supabase
     .from("generations")
     .select("*, sessions!inner(user_id, anon_cookie_id)")
-    .eq("id", params.generationId)
+    .eq("id", params.generationId);
   generationQuery = params.owner.userId
     ? generationQuery.eq("sessions.user_id", params.owner.userId)
     : generationQuery
         .eq("sessions.anon_cookie_id", params.owner.anonCookieId)
         .is("sessions.user_id", null);
-  const { data: generation } = await generationQuery.maybeSingle();
-  if (!generation) throw new Error("Generation not found.");
+  const { data: generation, error: generationError } = await generationQuery.maybeSingle();
+  if (generationError || !generation) throw new Error("Generation not found.");
 
-  const slug = `${
-    generation.user_input
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "prompt"
-  }-${generation.id.slice(0, 6)}`;
+  const normalizedTitle = params.title.trim().slice(0, 100);
+  const summary = params.summary.trim().slice(0, 500);
+  const tags = Array.isArray(generation.stack_json)
+    ? generation.stack_json
+        .map((item: { name?: unknown }) => typeof item?.name === "string" ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "")
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+  const slug = `${normalizedTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "prompt"}-${generation.id.slice(0, 6)}`;
   const { data, error } = await supabase
     .from("public_prompts")
-    .upsert(
-      {
-        generation_id: params.generationId,
-        slug,
-        title: generation.user_input.slice(0, 100),
-        idea_summary: generation.user_input,
-        stack_summary: JSON.stringify(generation.stack_json ?? []),
-        is_public: params.isPublic,
-      },
-      { onConflict: "generation_id" },
-    )
+    .upsert({
+      generation_id: params.generationId,
+      slug,
+      title: normalizedTitle,
+      idea_summary: summary,
+      stack_summary: JSON.stringify(generation.stack_json ?? []),
+      tags,
+      is_public: params.isPublic,
+    }, { onConflict: "generation_id" })
     .select()
     .single();
   if (error) throw new Error(`Failed to publish prompt: ${error.message}`);
@@ -485,8 +490,18 @@ export async function hasOwnedGeneration(generationId: string, owner: SessionOwn
   return Boolean(data);
 }
 
+export async function getOwnedPublicPrompt(generationId: string, owner: SessionOwner): Promise<PublicPromptRow | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("public_prompts").select("*").eq("generation_id", generationId).maybeSingle();
+  if (error) throw new Error("Failed to load publication details.");
+  if (!data) return null;
+  if (!(await hasOwnedGeneration(generationId, owner))) return null;
+  return data as PublicPromptRow;
+}
+
 export async function getPublicPrompt(
   slug: string,
+  options: { countView?: boolean } = {},
 ): Promise<PublicPromptRow | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -494,19 +509,22 @@ export async function getPublicPrompt(
     .select("*, generations(*)")
     .eq("slug", slug)
     .eq("is_public", true)
-    .single();
+    .eq("moderation_status", "visible")
+    .maybeSingle();
   if (error || !data) return null;
-  await supabase
-    .from("public_prompts")
-    .update({ view_count: (data.view_count ?? 0) + 1 })
-    .eq("id", data.id);
-  return { ...data, generation: data.generations } as PublicPromptRow;
+  let viewCount = data.view_count ?? 0;
+  if (options.countView) {
+    const { data: newCount, error: countError } = await supabase.rpc("increment_public_prompt_view", { p_slug: slug });
+    if (!countError && typeof newCount === "number") viewCount = newCount;
+  }
+  return { ...data, view_count: viewCount, generation: data.generations } as PublicPromptRow;
 }
 
 export async function listPublicPrompts(params: {
   page: number;
   limit: number;
   tag?: string;
+  search?: string;
 }): Promise<PublicPromptRow[]> {
   const supabase = createServiceRoleClient();
   const from = (params.page - 1) * params.limit;
@@ -515,12 +533,33 @@ export async function listPublicPrompts(params: {
     .from("public_prompts")
     .select("*, generations(*)")
     .eq("is_public", true)
+    .eq("moderation_status", "visible")
     .order("created_at", { ascending: false })
     .range(from, to);
-  if (params.tag) query = query.ilike("stack_summary", `%${params.tag}%`);
-  const { data } = await query;
-  return (data ?? []).map((row) => ({
-    ...row,
-    generation: row.generations,
-  })) as PublicPromptRow[];
+  if (params.tag) {
+    const tag = params.tag.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    query = query.contains("tags", [tag]);
+  }
+  if (params.search) {
+    const literal = params.search.replace(/[\\%_]/g, "\\$&");
+    query = query.ilike("title", `%${literal}%`);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error("Failed to list public prompts.");
+  return (data ?? []).map((row) => ({ ...row, generation: row.generations })) as PublicPromptRow[];
+}
+
+export async function getPublicPromptSitemapEntries(): Promise<Array<{ slug: string; created_at: string; tags: string[] }>> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("public_prompts")
+    .select("slug, created_at, tags").eq("is_public", true).eq("moderation_status", "visible");
+  if (error) throw new Error("Failed to load public prompt sitemap entries.");
+  return data ?? [];
+}
+
+export async function reportPublicPrompt(slug: string): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.rpc("report_public_prompt", { p_slug: slug });
+  if (error) throw new Error("Failed to report public prompt.");
+  return data === true;
 }

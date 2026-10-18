@@ -21,10 +21,17 @@ export const pageQuerySchema = z.object({
 
 export const exploreQuerySchema = pageQuerySchema.extend({
   tag: z.string().trim().min(1).max(80).optional(),
+  search: z.string().trim().min(1).max(100).optional(),
 });
 
 export const publishBodySchema = z.object({
   is_public: z.boolean().optional(),
+  title: z.string().trim().min(1).max(100).optional(),
+  summary: z.string().trim().min(1).max(500).optional(),
+}).strict();
+
+export const reportBodySchema = z.object({
+  reason: z.string().trim().max(500).optional(),
 }).strict();
 
 export const updateSessionBodySchema = z.object({
