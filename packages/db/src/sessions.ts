@@ -124,16 +124,33 @@ export async function getSession(
 export async function updateSession(
   sessionId: string,
   updates: { title?: string },
+  owner: SessionOwner,
 ): Promise<void> {
-  const supabase = await createServerSupabaseClient();
-
-  const { error } = await supabase
+  const supabase = await getOwnerClient(owner);
+  let query = supabase
     .from("sessions")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", sessionId);
+  query = owner.userId
+    ? query.eq("user_id", owner.userId)
+    : query.eq("anon_cookie_id", owner.anonCookieId).is("user_id", null);
+  const { error } = await query;
 
   if (error) {
     throw new Error(`Failed to update session: ${error.message}`);
+  }
+}
+
+export async function deleteSession(sessionId: string, owner: SessionOwner): Promise<void> {
+  const supabase = await getOwnerClient(owner);
+  let query = supabase.from("sessions").delete().eq("id", sessionId);
+  query = owner.userId
+    ? query.eq("user_id", owner.userId)
+    : query.eq("anon_cookie_id", owner.anonCookieId).is("user_id", null);
+  const { error } = await query;
+  if (error) {
+    console.error("[db/delete-session] SESSION_DELETE_FAILED", error);
+    throw new Error("Failed to delete session.");
   }
 }
 

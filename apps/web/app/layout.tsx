@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen antialiased" style={{ backgroundColor: "#211F1C", color: "#EDE9DF" }} suppressHydrationWarning>
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
         <AuthProvider>
           {children}
           <Analytics />

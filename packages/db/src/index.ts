@@ -7,6 +7,7 @@ export {
   createSession,
   getSession,
   updateSession,
+  deleteSession,
   createGeneration,
   getLatestGeneration,
   getGeneration,

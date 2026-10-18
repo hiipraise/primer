@@ -26,9 +26,6 @@ importers:
       '@primer/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      '@primer/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@supabase/ssr':
         specifier: ^0.12.3
         version: 0.12.3(@supabase/supabase-js@2.110.6)
@@ -147,28 +144,6 @@ importers:
       '@types/node':
         specifier: ^22.14.1
         version: 22.20.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-
-  packages/ui:
-    dependencies:
-      react:
-        specifier: ^19.0.0
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.7(react@19.2.7)
-    devDependencies:
-      '@primer/config':
-        specifier: workspace:*
-        version: link:../config
-      '@types/react':
-        specifier: ^19.1.2
-        version: 19.2.17
-      '@types/react-dom':
-        specifier: ^19.1.2
-        version: 19.2.3(@types/react@19.2.17)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

@@ -17,7 +17,6 @@ The deployable app runs on Vercel and uses Supabase for Auth and Postgres. Produ
 apps/web        Next.js App Router UI, API routes, OAuth callback
 packages/engine Groq orchestration, output parsing, formatting, rate limiting
 packages/db     Supabase clients and session/generation/library queries
-packages/ui     Shared React components
 packages/ads    Environment-gated ad slot component
 packages/config Shared TypeScript and ESLint configuration
 ```

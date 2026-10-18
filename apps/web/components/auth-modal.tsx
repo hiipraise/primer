@@ -530,11 +530,21 @@ export function AuthModal({
   // Close on Escape
   useEffect(() => {
     if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = () => modalRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? [];
+    focusable()[0]?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") { setOpen(false); return; }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) { e.preventDefault(); return; }
+      if (e.shiftKey && document.activeElement === items[0]) { e.preventDefault(); items[items.length - 1]?.focus(); }
+      else if (!e.shiftKey && document.activeElement === items[items.length - 1]) { e.preventDefault(); items[0]?.focus(); }
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => { document.removeEventListener("keydown", handler); previouslyFocused?.focus(); };
   }, [open]);
 
   // Close on click outside
@@ -567,6 +577,8 @@ export function AuthModal({
     <>
       <button
         onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         disabled={loading}
         style={{
           background: "transparent",
@@ -632,6 +644,10 @@ export function AuthModal({
         >
           <div
             ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Account"
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: "#2B2824",

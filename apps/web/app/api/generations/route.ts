@@ -3,6 +3,8 @@ import { getAllGenerations, getGeneration, getLatestGeneration, getSession } fro
 import { getRequestIdentity, sessionOwner } from "../../../lib/request-identity";
 import { generationsQuerySchema } from "../../../lib/validation";
 import { internalError } from "../../../lib/api-error";
+import { formatPrompt } from "@primer/engine";
+import type { GenerationSpec } from "@primer/engine";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
       const generation = await getGeneration(parsed.data.session_id, versionNumber, owner);
       if (!generation) return NextResponse.json({ error: "Generation not found.", code: "GENERATION_NOT_FOUND" }, { status: 404 });
       return NextResponse.json({
+        session_title: session.title,
         generation: {
           id: generation.id,
           session_id: generation.session_id,
@@ -38,6 +41,7 @@ export async function GET(request: Request) {
           format: generation.format,
           spec: generation.spec_json,
           change_summary: generation.change_summary,
+          files: generation.spec_json ? formatPrompt(generation.spec_json as unknown as GenerationSpec, generation.format as import("@primer/engine").PromptFormat).files : [],
           created_at: generation.created_at,
         },
       });
@@ -46,6 +50,7 @@ export async function GET(request: Request) {
     const generations = await getAllGenerations(parsed.data.session_id, owner);
     const latest = await getLatestGeneration(parsed.data.session_id, owner);
     return NextResponse.json({
+      session_title: session.title,
       generations: generations.map((generation) => ({
         id: generation.id,
         session_id: generation.session_id,
@@ -58,6 +63,7 @@ export async function GET(request: Request) {
         format: generation.format,
         spec: generation.spec_json,
         change_summary: generation.change_summary,
+        files: generation.spec_json ? formatPrompt(generation.spec_json as unknown as GenerationSpec, generation.format as import("@primer/engine").PromptFormat).files : [],
         created_at: generation.created_at,
       })),
       latest_version: latest?.version_number ?? 0,
