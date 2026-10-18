@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "../components/auth-provider";
-import { Analytics } from "../components/analytics";
+import { cookies } from "next/headers";
+import { ConsentProvider } from "../components/consent-provider";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://primer.build"),
@@ -15,18 +16,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const consentCookie = (await cookies()).get("primer_consent")?.value;
+  const initialChoice = consentCookie === "accepted" || consentCookie === "rejected" ? consentCookie : null;
   return (
     <html lang="en">
       <body className="min-h-screen antialiased" suppressHydrationWarning>
-        <AuthProvider>
-          {children}
-          <Analytics />
-        </AuthProvider>
+        <ConsentProvider initialChoice={initialChoice}>
+          <AuthProvider>{children}</AuthProvider>
+        </ConsentProvider>
       </body>
     </html>
   );

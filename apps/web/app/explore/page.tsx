@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listPublicPrompts } from "@primer/db";
-import { AdSlot } from "@primer/ads";
+import { ConsentAdSlot } from "../../components/consent-ad-slot";
 
 export const dynamic = "force-dynamic";
 export default async function ExplorePage({ searchParams }: { searchParams: Promise<{ search?: string }> }) {
@@ -11,6 +11,6 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
     <form action="/explore" style={{ marginTop: 24, display: "flex", gap: 8 }}><input name="search" defaultValue={search} placeholder="Search project titles" aria-label="Search project titles" maxLength={100} /><button type="submit">Search</button></form>
     <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 280px", gap: 24, marginTop: 36 }}><div style={{ display: "grid", gap: 12 }}>
       {prompts.map((prompt) => <Link key={prompt.id} href={`/p/${prompt.slug}`} style={{ color: "inherit", textDecoration: "none", border: "1px solid #3A362E", borderRadius: 8, padding: 20 }}><h2 style={{ margin: 0, fontSize: 20 }}>{prompt.title}</h2><p style={{ color: "#B5AF9E", lineHeight: 1.5 }}>{prompt.idea_summary}</p><small style={{ color: "#C08A2E" }}>{prompt.view_count} views</small><div>{prompt.tags.map((tag) => <span key={tag} style={{ color: "#B5E0D4", marginRight: 10 }}>#{tag}</span>)}</div></Link>)}
-      {!prompts.length && <p>No public prompts found.</p>}</div><aside style={{ minHeight: 250 }} aria-label="Advertisement space"><AdSlot position="explore-sidebar" width={280} height={250} /></aside></section>
+      {!prompts.length && <p>No public prompts found.</p>}</div><aside style={{ minHeight: 250 }} aria-label="Advertisement space"><ConsentAdSlot position="explore-sidebar" width={280} height={250} /></aside></section>
   </div></main>;
 }

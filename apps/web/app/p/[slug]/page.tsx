@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getPublicPrompt } from "@primer/db";
-import { AdSlot } from "@primer/ads";
+import { ConsentAdSlot } from "../../../components/consent-ad-slot";
 import { CopyPrompt } from "./copy-prompt";
 import { ReportPrompt } from "./report-prompt";
 
@@ -39,5 +39,5 @@ export default async function PublicPromptPage({ params }: PageProps) {
     {prompt.tags.length > 0 && <nav aria-label="Prompt tags" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 20 }}>{prompt.tags.map((tag) => <Link key={tag} href={`/explore/tag/${encodeURIComponent(tag)}`} style={{ color: "#B5E0D4" }}>#{tag}</Link>)}</nav>}
     <h2 style={{ marginTop: 40 }}>Final prompt</h2><pre style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, border: "1px solid #3A362E", padding: 20, borderRadius: 8 }}>{generation.output_prompt}</pre>
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}><CopyPrompt prompt={generation.output_prompt} /><Link href={`/?idea=${encodeURIComponent(prompt.idea_summary)}`} style={{ color: "#B5E0D4" }}>Fork this prompt</Link><ReportPrompt slug={prompt.slug} /></div>
-    <AdSlot position="public-prompt-sidebar" width={280} height={250} /></article></main>;
+    <ConsentAdSlot position="public-prompt-sidebar" width={280} height={250} /></article></main>;
 }

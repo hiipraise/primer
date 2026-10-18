@@ -212,3 +212,22 @@ html::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover {
   background: #6B6656;
 }
+
+
+.consent-banner { position:fixed; z-index:120; inset:auto 16px 16px; margin:auto; width:min(960px,calc(100% - 32px)); display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 22px; border:1px solid #625a4b; border-radius:14px; background:#2b2824; color:var(--primer-paper); box-shadow:0 18px 70px #000a; }
+.consent-copy { max-width:62ch; }
+.consent-copy h2 { font:600 18px Bricolage Grotesque,sans-serif; margin:0 0 7px; }
+.consent-copy p { color:var(--primer-muted); font-size:12px; line-height:1.55; margin:0 0 8px; }
+.consent-copy nav,.legal-nav { display:flex; gap:14px; font-size:11px; }
+.consent-copy a,.legal-page a { color:#9bd1c2; }
+.consent-actions { display:flex; flex:0 0 auto; gap:8px; }
+.consent-settings { position:fixed; right:14px; bottom:124px; z-index:29; padding:8px 10px; border:1px solid #514b41; border-radius:8px; background:#2b2824; color:var(--primer-muted); font-size:10px; cursor:pointer; }
+.legal-page { width:min(calc(100% - 32px),840px); margin:0 auto; padding:48px 0 100px; color:var(--primer-paper); }
+.legal-page>article { margin-top:28px; padding:clamp(20px,5vw,42px); border:1px solid var(--primer-border); border-radius:var(--primer-radius); background:var(--primer-surface); }
+.legal-page h1 { margin:8px 0; font:600 clamp(32px,6vw,48px)/1.1 Bricolage Grotesque,sans-serif; }
+.legal-page h2 { margin:28px 0 8px; font:600 19px Bricolage Grotesque,sans-serif; }
+.legal-page article p { color:var(--primer-muted); font-size:14px; line-height:1.75; }
+.legal-page .legal-updated,.legal-page .legal-contact { font-size:12px; }
+.legal-nav { margin-top:24px; }
+.primer-ad-slot { flex:0 0 auto; background:transparent; }
+@media (max-width:700px) { .consent-banner { align-items:stretch; flex-direction:column; gap:14px; } .consent-actions { justify-content:flex-end; } .consent-settings { bottom:122px; } }

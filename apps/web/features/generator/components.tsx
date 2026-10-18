@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, ChevronUp, Copy, Download, FileDown, Pencil, Share2, Trash2, X } from "lucide-react";
-import { AdSlot } from "@primer/ads";
+import { ConsentAdSlot } from "../../components/consent-ad-slot";
 import type { FormatterFile, GenerationResult, GenerationVersion, PromptFormat } from "./types";
 
 export function FormatPicker({ value, onChange }: { value: PromptFormat; onChange: (value: PromptFormat) => void }) {
@@ -118,7 +118,7 @@ export function ResultView({ result, copied, onCopy, publishedUrl, onPublish }: 
     <section className="recommendation-card"><button className="section-toggle" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}><span><span className="eyebrow">Project recommendations</span><strong>Stack, tools and skills</strong></span>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</button>{expanded && <div className="recommendation-grid">{([["Stack", result.stack], ["Tools", result.tools], ["Skills", result.skills]] as const).map(([title, items]) => <div className="recommendation-group" key={title}><h3>{title}</h3>{items.length ? items.map((item) => <article className="recommendation-item" key={item.name}><strong>{item.name}</strong><p>{item.reason}</p></article>) : <p className="muted">No recommendations in this section.</p>}</div>)}</div>}</section>
     {files.length > 0 && <section className="files-card"><header className="panel-heading"><div><span className="eyebrow">Formatted project files</span><small>{files.length} file{files.length === 1 ? "" : "s"}</small></div><button className="button button-secondary" onClick={downloadZip}><Download size={15} />Download .zip</button></header>{files.map((file) => <details className="file-entry" key={file.path}><summary><FileDown size={15} />{file.path}</summary><button className="text-button file-copy" onClick={() => onCopy(file.content, file.path)}>{copied === file.path ? "Copied" : "Copy file"}</button><pre>{file.content}</pre></details>)}</section>}
     <div className="result-actions"><button className="button button-secondary" onClick={() => onCopy([result.prompt, ...files.map((file) => file.content)].join("\n\n"), "all")}>{copied === "all" ? <Check size={15} /> : <Copy size={15} />}{copied === "all" ? "Copied all" : "Copy all"}</button><PublishPanel result={result} publishedUrl={publishedUrl} onPublish={onPublish} /></div>
-    <AdSlot position="generation-result" />
+    <ConsentAdSlot position="generation-result" />
   </div>;
 }
 
