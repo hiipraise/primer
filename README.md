@@ -11,7 +11,7 @@ Primer prepares you to build. Describe an app idea and Primer returns a recommen
 
 ## Architecture
 
-Primer keeps its deployment to two managed services: the Next.js app on Vercel and Supabase for Auth and Postgres. Groq is the model API provider used by the server-side engine.
+The deployable app runs on Vercel and uses Supabase for Auth and Postgres. Production generation limiting also requires Upstash Redis so limits are shared across serverless instances. Groq is the model API provider used by the server-side engine.
 
 ```text
 apps/web        Next.js App Router UI, API routes, OAuth callback
@@ -22,7 +22,7 @@ packages/ads    Environment-gated ad slot component
 packages/config Shared TypeScript and ESLint configuration
 ```
 
-The browser uses Supabase Auth through server-managed cookies. Application session and generation data is stored in Postgres; the app does not use `localStorage` or `sessionStorage` for auth or sessions. `packages/engine` contains the model integration, while `apps/web` is the only deployable application.
+The browser uses Supabase Auth through server-managed cookies. Application session and generation data is stored in Postgres; the app does not use `localStorage` or `sessionStorage` for auth or sessions. `packages/engine` contains the model integration, while `apps/web` is the only deployable application. Zod validates API inputs. Production rate limiting uses `@upstash/ratelimit` with Upstash Redis so limits are shared across serverless instances; local development uses the in-memory implementation.
 
 ## Data model
 
@@ -39,13 +39,16 @@ Row-level security is enabled for application tables. Anonymous session bookkeep
 
 ## Database migrations
 
-Apply all five SQL files, in numerical order, to a new Supabase project:
+Apply all six SQL files, in numerical order, to a new Supabase project:
 
 1. [`001_auth_tables.sql`](packages/db/migrations/001_auth_tables.sql) — creates anonymous sessions, sessions, generations, indexes, and initial RLS policies.
-2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) — updates anonymous access policies.
-3. [`003_claim_anon_policy.sql`](packages/db/migrations/003_claim_anon_policy.sql) — allows signed-in users to claim anonymous sessions.
+2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) — historical anonymous access policy update, tightened by migration 006.
+3. [`003_claim_anon_policy.sql`](packages/db/migrations/003_claim_anon_policy.sql) — historical claim policy, replaced by server-side claiming in migration 006.
 4. [`004_enable_rls_anon_sessions.sql`](packages/db/migrations/004_enable_rls_anon_sessions.sql) — enables RLS and blocks direct client access to anonymous usage rows.
 5. [`005_public_prompts.sql`](packages/db/migrations/005_public_prompts.sql) — creates the public prompt library and adds generation format storage.
+6. [`006_secure_anonymous_ownership.sql`](packages/db/migrations/006_secure_anonymous_ownership.sql) — limits direct access to user-owned rows and adds atomic anonymous quota functions.
+
+For an existing installation that has already applied migrations 001–005, review and apply only migration 006. It changes RLS policies and installs the quota functions; it does not delete application data.
 
 Run each file in order with the Supabase SQL Editor, or link the project and use the Supabase CLI migration workflow. Do not re-run these files on a database that already has them applied.
 
@@ -64,7 +67,7 @@ cd primer
 pnpm install
 ```
 
-Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all five migrations to Supabase, then start the app:
+Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all six migrations to Supabase, then start the app:
 
 ```sh
 pnpm dev
@@ -83,6 +86,9 @@ Open <http://localhost:3000>. To enable Google sign-in, enable Google under Supa
 | `NEXT_PUBLIC_SITE_URL` | No | Canonical app URL used for OAuth redirects; defaults to `http://localhost:3000` |
 | `ADS_ENABLED` | No | Enables ad slots when set to `true`; defaults to disabled |
 | `NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN` | No | Enables Cloudflare Web Analytics when set; analytics is omitted when unset |
+| `UPSTASH_REDIS_REST_URL` | Production | Upstash Redis REST endpoint used by the generation rate limiter |
+| `UPSTASH_REDIS_REST_TOKEN` | Production | Server-only Upstash Redis REST token |
+| `ANON_GENERATION_CAP` | No | Anonymous generation quota; defaults to `3` |
 
 ## API reference
 
@@ -97,7 +103,7 @@ Open <http://localhost:3000>. To enable Google sign-in, enable Google under Supa
 | `/api/explore` | GET | List public prompts with pagination and optional tag filter |
 | `/api/auth/user` | GET | Return the current signed-in user, if any |
 | `/api/auth/signin` | GET | Start the Google OAuth flow and return its URL |
-| `/api/auth/signout` | GET | Sign out and redirect to the app root |
+| `/api/auth/signout` | POST | Sign out the current user |
 | `/auth/callback` | GET | Complete the Supabase OAuth callback |
 
 ## Development commands
@@ -110,7 +116,7 @@ pnpm test       # Run package tests
 pnpm build      # Build the workspace
 ```
 
-GitHub Actions runs install, typecheck, lint, test, and build on pushes and pull requests.
+GitHub Actions runs install, typecheck, lint, test, and build on pushes and pull requests. Local development uses the in-memory rate limiter; production requires the Upstash variables above.
 
 ## License
 

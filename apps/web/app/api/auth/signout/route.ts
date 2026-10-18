@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@primer/db";
+import { internalError } from "../../../../lib/api-error";
 
-export async function GET() {
-  const supabase = await createServerSupabaseClient();
-  await supabase.auth.signOut();
-
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-  return NextResponse.redirect(siteUrl);
+export async function POST() {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    return NextResponse.json({ signed_out: true });
+  } catch (error) {
+    return internalError("api/auth/signout", error, "SIGNOUT_FAILED");
+  }
 }

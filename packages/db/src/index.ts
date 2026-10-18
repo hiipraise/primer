@@ -18,9 +18,11 @@ export {
   claimAnonSessions,
   getOrCreateAnonSession,
   incrementAnonGenerations,
+  refundAnonGeneration,
   publishGeneration,
+  hasOwnedGeneration,
   getPublicPrompt,
   listPublicPrompts,
 } from "./sessions";
 
-export type { SessionRow, GenerationRow, PublicPromptRow } from "./sessions";
+export type { SessionRow, GenerationRow, PublicPromptRow, SessionOwner } from "./sessions";

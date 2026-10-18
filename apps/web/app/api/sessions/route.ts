@@ -1,42 +1,33 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, getUserSessions } from "@primer/db";
+import { pageQuerySchema, parsePage } from "../../../lib/validation";
+import { internalError } from "../../../lib/api-error";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") ?? "1", 10);
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 50);
-
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ sessions: [], total: 0, page, limit });
-  }
+  const query = pageQuerySchema.safeParse({
+    page: searchParams.get("page") ?? undefined,
+    limit: searchParams.get("limit") ?? undefined,
+  });
+  if (!query.success) return NextResponse.json({ error: "Invalid query parameters.", code: "INVALID_QUERY" }, { status: 400 });
+  const page = Math.min(parsePage(query.data.page, 1, 1_000_000), 1_000_000);
+  const limit = parsePage(query.data.limit, 20, 50);
 
   try {
-    const { sessions, total } = await getUserSessions({
-      userId: user.id,
-      page,
-      limit,
-    });
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    if (!user) return NextResponse.json({ sessions: [], total: 0, page, limit });
 
+    const result = await getUserSessions({ userId: user.id, page, limit });
     return NextResponse.json({
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        title: s.title,
-        created_at: s.created_at,
-        updated_at: s.updated_at,
-      })),
-      total,
+      sessions: result.sessions.map(({ id, title, created_at, updated_at }) => ({ id, title, created_at, updated_at })),
+      total: result.total,
       page,
       limit,
-      has_more: page * limit < total,
+      has_more: page * limit < result.total,
     });
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to fetch sessions.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return internalError("api/sessions", error, "SESSIONS_FETCH_FAILED");
   }
 }

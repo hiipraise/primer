@@ -46,7 +46,9 @@ export async function middleware(request: NextRequest) {
   // Issue an anonymous cookie for pre-signup users.
   // This is an httpOnly, secure, server-side cookie — never accessible via JS.
   // Used to key anon_sessions and sessions.anon_cookie_id for anonymous usage tracking.
-  if (!user && !request.cookies.has("primer_anon_id")) {
+  const anonCookie = request.cookies.get("primer_anon_id")?.value;
+  const validAnonCookie = anonCookie && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(anonCookie);
+  if (!user && !validAnonCookie) {
     supabaseResponse.cookies.set("primer_anon_id", crypto.randomUUID(), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

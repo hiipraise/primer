@@ -10,4 +10,8 @@ describe("getCookieValue", () => {
     expect(getCookieValue(null, "primer_anon_id")).toBeNull();
     expect(getCookieValue("first=1", "primer_anon_id")).toBeNull();
   });
+
+  it("rejects malformed percent encoding", () => {
+    expect(getCookieValue("primer_anon_id=%E0%A4%A", "primer_anon_id")).toBeNull();
+  });
 });

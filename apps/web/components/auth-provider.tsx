@@ -86,7 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    window.location.href = "/api/auth/signout";
+    try {
+      const response = await fetch("/api/auth/signout", { method: "POST" });
+      if (!response.ok) throw new Error("Sign-out failed.");
+      setUser(null);
+      window.location.assign("/");
+    } catch {
+      setSignInError("Could not sign out. Please try again.");
+    }
   }, []);
 
   const clearSignInError = useCallback(() => setSignInError(null), []);

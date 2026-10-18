@@ -13,6 +13,8 @@ export interface EngineInput {
   session_id?: string;
   /** Client IP address for rate limiting */
   ip: string;
+  /** Set only by a caller that already checked the limiter before session work. */
+  rateLimitChecked?: boolean;
   /** Prior context from a previous generation (for refinements) */
   priorContext?: PriorContext;
   format?: PromptFormat;

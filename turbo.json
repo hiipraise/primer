@@ -8,7 +8,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**"],
-      "env": ["GROQ_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "ADS_ENABLED"]
+      "env": ["GROQ_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "ADS_ENABLED", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "ANON_GENERATION_CAP"]
     },
     "lint": {},
     "typecheck": {},

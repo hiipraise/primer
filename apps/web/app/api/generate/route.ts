@@ -1,99 +1,58 @@
 import { NextResponse } from "next/server";
+import { createSession, createGeneration, getSession, getLatestGeneration, getOrCreateAnonSession, incrementAnonGenerations, refundAnonGeneration } from "@primer/db";
+import type { SessionOwner } from "@primer/db";
 import { getEngine, RateLimitError } from "@primer/engine";
 import type { EngineOutput, PriorContext } from "@primer/engine";
-import {
-  createServerSupabaseClient,
-  createSession,
-  getSession,
-  getLatestGeneration,
-  createGeneration,
-  getCookieValue,
-  getOrCreateAnonSession,
-  incrementAnonGenerations,
-} from "@primer/db";
+import { attachAnonCookie, getClientIp, getRequestIdentity } from "../../../lib/request-identity";
+import { generateBodySchema } from "../../../lib/validation";
+import { internalError } from "../../../lib/api-error";
 
-// ─── Constants ───────────────────────────────────────────────────────
-const ANON_GENERATION_CAP = 3;
+const DEFAULT_ANON_CAP = 3;
+const configuredCap = Number(process.env.ANON_GENERATION_CAP ?? "");
+const ANON_GENERATION_CAP = Number.isSafeInteger(configuredCap) && configuredCap > 0 ? configuredCap : DEFAULT_ANON_CAP;
 
-// ─── Types ───────────────────────────────────────────────────────────
-interface GenerateRequest {
-  input: string;
-  session_id?: string;
-  format?: "claude-code" | "cursor" | "v0" | "windsurf" | "generic";
-}
-
-// ─── Helper: extract client IP ───────────────────────────────────────
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp;
-  return "127.0.0.1";
-}
-
-// ─── Helper: extract user identity from request ──────────────────────
-async function getIdentity(request: Request) {
-  const cookieHeader = request.headers.get("cookie");
-  const anonCookieId = getCookieValue(cookieHeader, "primer_anon_id");
-
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { user, anonCookieId };
-}
-
-// ─── Route handler ───────────────────────────────────────────────────
 export async function POST(request: Request) {
-  try {
-    const body: GenerateRequest = await request.json();
+  let anonCookieId: string | null = null;
+  let shouldSetCookie = false;
+  let slotReserved = false;
 
-    if (!body.input || !body.input.trim()) {
-      return NextResponse.json(
-        { error: "Input is required." },
-        { status: 400 },
-      );
+  const json = (body: unknown, init?: ResponseInit) => {
+    const response = NextResponse.json(body, init);
+    return anonCookieId ? attachAnonCookie(response, anonCookieId, shouldSetCookie) : response;
+  };
+
+  try {
+    const rawBody = await request.json().catch(() => null);
+    const parsedBody = generateBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return json({ error: "Invalid generation request.", code: "INVALID_REQUEST" }, { status: 400 });
     }
+    const body = parsedBody.data;
 
     const engine = getEngine();
     const ip = getClientIp(request);
-    const { user, anonCookieId } = await getIdentity(request);
+    await engine.checkRateLimit(ip);
 
-    // ── Anonymous cap check ──
-    // Authenticated users are unlimited. Anonymous users get ANON_GENERATION_CAP generations.
-    if (!user && anonCookieId) {
-      const anonSession = await getOrCreateAnonSession(anonCookieId);
-      if (anonSession.generations_used >= ANON_GENERATION_CAP) {
-        return NextResponse.json(
-          {
-            error: "anon_cap_reached",
-            message: `You've used all ${ANON_GENERATION_CAP} free generations. Sign in to continue.`,
-            used: anonSession.generations_used,
-            cap: ANON_GENERATION_CAP,
-          },
-          { status: 403 },
-        );
-      }
+    const identityCookie = await getRequestIdentity(request);
+    const userId = identityCookie.userId;
+    anonCookieId = identityCookie.anonCookieId;
+    if (!userId && !anonCookieId) {
+      anonCookieId = crypto.randomUUID();
+      shouldSetCookie = true;
     }
+
+    const owner: SessionOwner = userId
+      ? { userId }
+      : { userId: null, anonCookieId: anonCookieId! };
 
     let sessionId = body.session_id;
     let priorContext: PriorContext | undefined;
     let versionNumber = 1;
 
     if (sessionId) {
-      // ── Refinement: load existing session for context ──
-      const existing = await getSession(sessionId);
-      if (!existing) {
-        return NextResponse.json(
-          { error: "Session not found." },
-          { status: 404 },
-        );
-      }
-
-      const latestGen = await getLatestGeneration(sessionId);
+      const existing = await getSession(sessionId, owner);
+      if (!existing) return json({ error: "Session not found.", code: "SESSION_NOT_FOUND" }, { status: 404 });
+      const latestGen = await getLatestGeneration(sessionId, owner);
       if (latestGen) {
         priorContext = {
           previousInput: latestGen.user_input,
@@ -101,44 +60,53 @@ export async function POST(request: Request) {
         };
         versionNumber = latestGen.version_number + 1;
       }
-    } else {
-      // ── New session ──
-      const title = body.input.trim().slice(0, 100);
+    }
+
+    if (!userId) {
+      await getOrCreateAnonSession(anonCookieId!);
+      const used = await incrementAnonGenerations(anonCookieId!, ANON_GENERATION_CAP);
+      if (used === 0) {
+        return json({
+          error: "You've used all free generations. Sign in to continue.",
+          code: "ANON_CAP_REACHED",
+          cap: ANON_GENERATION_CAP,
+        }, { status: 403 });
+      }
+      slotReserved = true;
+    }
+
+    if (!sessionId) {
       const session = await createSession({
-        userId: user?.id ?? null,
-        anonCookieId: anonCookieId ?? null,
-        title,
+        userId,
+        anonCookieId: userId ? null : anonCookieId,
+        title: body.input.slice(0, 100),
       });
       sessionId = session.id;
     }
 
-    // Run the engine with prior context (if any)
     const result: EngineOutput = await engine.generate({
-      input: body.input.trim(),
+      input: body.input,
       session_id: sessionId,
       ip,
+      rateLimitChecked: true,
       priorContext,
       format: body.format ?? "generic",
     });
 
-    // Persist the generation to Postgres
     const generation = await createGeneration({
       sessionId,
       versionNumber,
-      userInput: body.input.trim(),
+      userInput: body.input,
       outputPrompt: result.prompt,
       stack: result.stack,
       tools: result.tools,
       skills: result.skills,
       format: result.format,
+      owner,
     });
+    slotReserved = false;
 
-    // Increment anonymous generation counter
-    if (!user && anonCookieId) {
-      await incrementAnonGenerations(anonCookieId);
-    }
-
-    return NextResponse.json({
+    return json({
       prompt: result.prompt,
       stack: result.stack,
       tools: result.tools,
@@ -149,28 +117,21 @@ export async function POST(request: Request) {
       created_at: result.created_at,
       format: result.format,
     });
-  } catch (err) {
-    // Rate limit exceeded
-    if (err instanceof RateLimitError) {
-      return NextResponse.json(
-        {
-          error: err.message,
-          retry_after: err.retryAfter,
-          reset_at: new Date(err.resetAt).toISOString(),
-        },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(err.retryAfter),
-            "X-RateLimit-Reset": String(err.resetAt),
-          },
-        },
-      );
+  } catch (error) {
+    if (slotReserved && anonCookieId) {
+      try {
+        await refundAnonGeneration(anonCookieId);
+      } catch (refundError) {
+        console.error("[api/generate] ANON_SLOT_REFUND_FAILED", refundError);
+      }
     }
-
-    // Groq API, DB, or other unexpected errors
-    const message =
-      err instanceof Error ? err.message : "An unexpected error occurred.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (error instanceof RateLimitError) {
+      return json({ error: "Too many requests. Please try again later.", code: "RATE_LIMITED", retry_after: error.retryAfter }, {
+        status: 429,
+        headers: { "Retry-After": String(error.retryAfter), "X-RateLimit-Reset": String(error.resetAt) },
+      });
+    }
+    const response = internalError("api/generate", error, "GENERATION_FAILED");
+    return anonCookieId ? attachAnonCookie(response, anonCookieId, shouldSetCookie) : response;
   }
 }

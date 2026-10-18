@@ -1,78 +1,65 @@
 import { NextResponse } from "next/server";
-import {
-  getAllGenerations,
-  getGeneration,
-  getLatestGeneration,
-} from "@primer/db";
+import { getAllGenerations, getGeneration, getLatestGeneration, getSession } from "@primer/db";
+import { getRequestIdentity, sessionOwner } from "../../../lib/request-identity";
+import { generationsQuerySchema } from "../../../lib/validation";
+import { internalError } from "../../../lib/api-error";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const sessionId = searchParams.get("session_id");
-  const versionParam = searchParams.get("version");
-
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "session_id query parameter is required." },
-      { status: 400 }
-    );
+  const parsed = generationsQuerySchema.safeParse({
+    session_id: searchParams.get("session_id") ?? undefined,
+    version: searchParams.get("version") ?? undefined,
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid query parameters.", code: "INVALID_QUERY" }, { status: 400 });
   }
 
   try {
-    // Fetch a specific version
-    if (versionParam !== null) {
-      const versionNumber = parseInt(versionParam, 10);
-      if (isNaN(versionNumber) || versionNumber < 1) {
-        return NextResponse.json(
-          { error: "Invalid version number." },
-          { status: 400 }
-        );
-      }
+    const identity = await getRequestIdentity(request);
+    const owner = sessionOwner(identity);
+    if (!owner) return NextResponse.json({ error: "Authentication required.", code: "UNAUTHORIZED" }, { status: 401 });
+    const session = await getSession(parsed.data.session_id, owner);
+    if (!session) return NextResponse.json({ error: "Session not found.", code: "SESSION_NOT_FOUND" }, { status: 404 });
 
-      const gen = await getGeneration(sessionId, versionNumber);
-      if (!gen) {
-        return NextResponse.json(
-          { error: "Generation not found." },
-          { status: 404 }
-        );
-      }
-
+    if (parsed.data.version) {
+      const versionNumber = Number(parsed.data.version);
+      const generation = await getGeneration(parsed.data.session_id, versionNumber, owner);
+      if (!generation) return NextResponse.json({ error: "Generation not found.", code: "GENERATION_NOT_FOUND" }, { status: 404 });
       return NextResponse.json({
         generation: {
-          id: gen.id,
-          session_id: gen.session_id,
-          version_number: gen.version_number,
-          user_input: gen.user_input,
-          output_prompt: gen.output_prompt,
-          stack: gen.stack_json as Array<{ name: string; reason: string }> | null,
-          tools: gen.tools_json as Array<{ name: string; reason: string }> | null,
-          skills: gen.skills_json as Array<{ name: string; reason: string }> | null,
-          created_at: gen.created_at,
+          id: generation.id,
+          session_id: generation.session_id,
+          version_number: generation.version_number,
+          user_input: generation.user_input,
+          output_prompt: generation.output_prompt,
+          stack: generation.stack_json,
+          tools: generation.tools_json,
+          skills: generation.skills_json,
+          format: generation.format,
+          created_at: generation.created_at,
         },
       });
     }
 
-    // Fetch all generations for the session
-    const generations = await getAllGenerations(sessionId);
-    const latest = await getLatestGeneration(sessionId);
-
+    const generations = await getAllGenerations(parsed.data.session_id, owner);
+    const latest = await getLatestGeneration(parsed.data.session_id, owner);
     return NextResponse.json({
-      generations: generations.map((gen) => ({
-        id: gen.id,
-        session_id: gen.session_id,
-        version_number: gen.version_number,
-        user_input: gen.user_input,
-        output_prompt: gen.output_prompt,
-        stack: gen.stack_json,
-        tools: gen.tools_json,
-        skills: gen.skills_json,
-        created_at: gen.created_at,
+      generations: generations.map((generation) => ({
+        id: generation.id,
+        session_id: generation.session_id,
+        version_number: generation.version_number,
+        user_input: generation.user_input,
+        output_prompt: generation.output_prompt,
+        stack: generation.stack_json,
+        tools: generation.tools_json,
+        skills: generation.skills_json,
+        format: generation.format,
+        created_at: generation.created_at,
       })),
       latest_version: latest?.version_number ?? 0,
       total: generations.length,
     });
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to fetch generations.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return internalError("api/generations", error, "GENERATIONS_FETCH_FAILED");
   }
 }
