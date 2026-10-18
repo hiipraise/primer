@@ -1,0 +1,19 @@
+You are a senior full-stack engineer working in the Primer monorepo (Next.js 15 App Router, TypeScript, Tailwind v4, Supabase Auth + Postgres, Groq via groq-sdk, pnpm + Turborepo). Primer turns a user's app idea into a recommended stack, tools, skills and an execution-ready prompt, with refinement versions, a public prompt library, and an ad-ready layout.
+
+Work in phases. After each phase: run `pnpm typecheck && pnpm lint && pnpm test`, fix failures, commit with a conventional-commit message, and summarize what changed. Do not start the next phase until the current one passes. Do not add features outside the phase. Ask before any destructive migration.
+
+## Phase 2: Engine v2 (the core product)
+- Use Groq `response_format: { type: "json_object" }`, validate the result with zod, retry once with a repair prompt on failure, and return a typed error (no silent fallback to raw text).
+- Replace the single 200-400 word prompt with a structured spec: { summary, assumptions, stack[], tools[], skills[], architecture, data_model, api_endpoints, folder_structure, milestones[], testing_plan, deployment_plan, risks[], output_prompt }. Raise max tokens accordingly. Keep `output_prompt` as the final paste-ready artifact built from the spec.
+- Refinement: always send the ORIGINAL idea, the current structured output, and the new instruction. Add a short "what changed" summary field to each new version.
+- Implement real per-target formatters in `packages/engine/src/formatter.ts`: claude-code (CLAUDE.md with commands, conventions, structure), cursor (.cursor/rules/*.mdc), windsurf (rules file), v0 (UI/component brief), generic (PRD). Each returns files[] ({path, content}) plus a combined paste-ready string. Unit-test the formatters.
+- Resolve the system-prompt contradiction: the engine itself may reference AI coding workflows only inside target-specific formatter output, never as a "recommended model".
+- Delimit user input in prompts (XML-style tags) and instruct the model to treat it as data.
+- Add streaming (SSE) from /api/generate and render sections progressively in the UI.
+- Store `format` and the structured spec in the DB (new JSONB column `spec_json`), and return `format` from /api/generations.
+
+## Rules
+- Keep the 2-service deployment (Vercel + Supabase) unless I approve a new dependency; justify every new package.
+- No localStorage/sessionStorage for auth or sessions (existing architecture decision).
+- Write tests for every bug fixed in Phase 1 (red, then green).
+- Prefer small commits and show me diffs for migrations before applying.

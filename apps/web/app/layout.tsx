@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "../components/auth-provider";
+import { Analytics } from "../components/analytics";
 
 export const metadata: Metadata = {
   title: "Primer",
@@ -20,15 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <script
-          defer
-          src="https://static.cloudflareinsights.com/beacon.min.js"
-          data-cf-beacon='{"token": "placeholder"}'
-        />
-      </head>
       <body className="min-h-screen antialiased" style={{ backgroundColor: "#211F1C", color: "#EDE9DF" }} suppressHydrationWarning>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <Analytics />
+        </AuthProvider>
       </body>
     </html>
   );

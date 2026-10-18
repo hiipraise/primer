@@ -1,0 +1,15 @@
+You are a senior full-stack engineer working in the Primer monorepo (Next.js 15 App Router, TypeScript, Tailwind v4, Supabase Auth + Postgres, Groq via groq-sdk, pnpm + Turborepo). Primer turns a user's app idea into a recommended stack, tools, skills and an execution-ready prompt, with refinement versions, a public prompt library, and an ad-ready layout.
+
+Work in phases. After each phase: run `pnpm typecheck && pnpm lint && pnpm test`, fix failures, commit with a conventional-commit message, and summarize what changed. Do not start the next phase until the current one passes. Do not add features outside the phase. Ask before any destructive migration.
+
+## Phase 6: Growth features (only after Phases 0-5 are green)
+- Adaptive intake: 3-6 follow-up questions generated from the first answer.
+- Prompt lint score with actionable fixes before generation.
+- Public API (`/api/v1/generate` with API keys, per-key rate limits) and a `primer` CLI package.
+- Region presets (Paystack/Flutterwave, low-bandwidth mode) and cost estimates in NGN/USD.
+
+## Rules
+- Keep the 2-service deployment (Vercel + Supabase) unless I approve a new dependency; justify every new package.
+- No localStorage/sessionStorage for auth or sessions (existing architecture decision).
+- Write tests for every bug fixed in Phase 1 (red, then green).
+- Prefer small commits and show me diffs for migrations before applying.

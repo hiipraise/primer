@@ -1,238 +1,117 @@
 # Primer
 
-**Preps you before you build.**
-
-Tell Primer what you want to build. It hands you back the stack, the tools, and a senior-level execution-ready prompt — refined through conversation, saved forever, ready to paste into any AI platform.
+Primer prepares you to build. Describe an app idea and Primer returns a recommended stack, tools, skills, and an execution ready prompt. Refine the result over multiple versions, save it in a session, or publish it to the public prompt library.
 
 ## How it works
 
-```
-You describe your idea → Primer analyzes it → Returns: stack + tools + skills + prompt
-You refine ("make it mobile-first") → New version in the same session → Copy the final prompt
-```
+1. The Next.js app collects an idea and sends it to the server API.
+2. The engine applies rate limits and asks Groq to generate a recommendation.
+3. The database package stores sessions and generations in Supabase Postgres.
+4. The UI displays the result and lets users refine it, sign in, or publish it.
 
-Primer is model-agnostic — it never recommends a specific AI model. What you paste the prompt into is your choice.
+## Architecture
 
-## Tech stack
+Primer keeps its deployment to two managed services: the Next.js app on Vercel and Supabase for Auth and Postgres. Groq is the model API provider used by the server-side engine.
 
-| Layer          | Choice                                                           |
-| -------------- | ---------------------------------------------------------------- |
-| Frontend       | Next.js 15 (App Router), TypeScript, Tailwind CSS v4             |
-| Backend        | Next.js Route Handlers (`/app/api/*`)                            |
-| Auth           | Supabase Auth (Google OAuth) — httpOnly cookies, no localStorage |
-| Database       | Supabase Postgres — RLS, sessions, generations                   |
-| LLM (internal) | Groq API (Llama 3.3 70B) — free tier, 30 req/min                 |
-| Hosting        | Vercel + Supabase (both free-tier)                               |
-| Rate limiting  | In-memory sliding window (10 req / 15 min per IP)                |
-
-## Project structure
-
-```
-primer/
-├── apps/web/                    # Next.js 15 — UI + API routes
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth/            # Sign-in, sign-out, user info
-│   │   │   ├── generate/        # LLM-powered generation
-│   │   │   ├── generations/     # Version browsing
-│   │   │   └── sessions/        # History listing + claim flow
-│   │   ├── auth/callback/       # OAuth redirect handler
-│   │   ├── layout.tsx           # Root layout + auth provider
-│   │   └── page.tsx             # Single-page app
-│   ├── components/
-│   │   ├── auth-provider.tsx    # Auth context
-│   │   └── auth-modal.tsx       # Profile + history + claim
-│   └── middleware.ts            # Session refresh + anonymous cookie
-│
-├── packages/
-│   ├── ui/                      # Shared React components
-│   ├── db/                      # Supabase client + CRUD
-│   ├── engine/                  # LLM orchestrator + rate limiter
-│   └── config/                  # Shared eslint/tsconfig
-│
-├── .env.example                 # Required environment variables
-└── package.json                 # Turborepo root
+```text
+apps/web        Next.js App Router UI, API routes, OAuth callback
+packages/engine Groq orchestration, output parsing, formatting, rate limiting
+packages/db     Supabase clients and session/generation/library queries
+packages/ui     Shared React components
+packages/ads    Environment-gated ad slot component
+packages/config Shared TypeScript and ESLint configuration
 ```
 
----
+The browser uses Supabase Auth through server-managed cookies. Application session and generation data is stored in Postgres; the app does not use `localStorage` or `sessionStorage` for auth or sessions. `packages/engine` contains the model integration, while `apps/web` is the only deployable application.
 
-## Step-by-step setup
+## Data model
 
-### Prerequisites
+The database migrations create four tables:
 
-- **Node.js 20+** — [Download](https://nodejs.org/)
-- **pnpm 9+** — Install via `npm install -g pnpm` or [corepack](https://nodejs.org/api/corepack.html): `corepack enable && corepack prepare pnpm@latest --activate`
-- **A Supabase account** — Free tier at [supabase.com](https://supabase.com)
-- **A Groq API key** — Free tier at [console.groq.com](https://console.groq.com)
+| Table | Purpose | Main relationships and fields |
+| --- | --- | --- |
+| `anon_sessions` | Anonymous usage tracked by the `primer_anon_id` cookie | `cookie_id` is unique; `generations_used` tracks usage |
+| `sessions` | A user's idea and its refinement history | `user_id` for signed-in ownership or `anon_cookie_id` for anonymous ownership; has title and timestamps |
+| `generations` | One generated version in a session | `session_id` references `sessions`; stores input, prompt, stack/tools/skills JSON, format, and version number |
+| `public_prompts` | A published generation in the public library | `generation_id` references `generations`; stores slug, title, summary, stack summary, visibility, and view count |
 
----
+Row-level security is enabled for application tables. Anonymous session bookkeeping is server-managed; the service-role key is only used in server code. Review each migration before applying it to a database.
 
-### Step 1: Clone and install dependencies
+## Database migrations
 
-```bash
+Apply all five SQL files, in numerical order, to a new Supabase project:
+
+1. [`001_auth_tables.sql`](packages/db/migrations/001_auth_tables.sql) — creates anonymous sessions, sessions, generations, indexes, and initial RLS policies.
+2. [`002_fix_rls_anonymous.sql`](packages/db/migrations/002_fix_rls_anonymous.sql) — updates anonymous access policies.
+3. [`003_claim_anon_policy.sql`](packages/db/migrations/003_claim_anon_policy.sql) — allows signed-in users to claim anonymous sessions.
+4. [`004_enable_rls_anon_sessions.sql`](packages/db/migrations/004_enable_rls_anon_sessions.sql) — enables RLS and blocks direct client access to anonymous usage rows.
+5. [`005_public_prompts.sql`](packages/db/migrations/005_public_prompts.sql) — creates the public prompt library and adds generation format storage.
+
+Run each file in order with the Supabase SQL Editor, or link the project and use the Supabase CLI migration workflow. Do not re-run these files on a database that already has them applied.
+
+## Requirements
+
+- Node.js 20 or newer
+- pnpm 9.15.9 (managed with Corepack or installed separately)
+- A Supabase project with Google OAuth configured
+- A Groq API key
+
+## Setup
+
+```sh
 git clone <repo-url>
 cd primer
 pnpm install
 ```
 
-This installs all dependencies for the monorepo (apps/web, packages/db, packages/engine, packages/ui, packages/config).
+Copy `.env.example` to `apps/web/.env.local` and set the values described below. Apply all five migrations to Supabase, then start the app:
 
----
-
-### Step 2: Create a Supabase project
-
-1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and click **New project**.
-2. Choose a name (e.g., "primer"), set a secure database password, and pick a region close to you.
-3. Wait ~2 minutes for the project to provision.
-4. Once ready, go to **Project Settings → API** and note down the following:
-
-   | Variable                        | Where to find it                                                         |
-   | ------------------------------- | ------------------------------------------------------------------------ |
-   | `NEXT_PUBLIC_SUPABASE_URL`      | **Project URL** — looks like `https://xxxxx.supabase.co`                 |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **anon public** key                                                      |
-   | `SUPABASE_SERVICE_ROLE_KEY`     | **service_role** key (⚠️ keep this secret — never expose it client-side) |
-
----
-
-### Step 3: Set up environment variables
-
-```bash
-cp .env.example apps/web/.env.local
-```
-
-Open `apps/web/.env.local` and fill in your values:
-
-````env
-# Your Supabase project URL (from Step 2)
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-
-# Your Supabase anon/public key (from Step 2)
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-
-# Server-side only — used by createServiceRoleClient() to bypass RLS
-# for internal tables (anon_sessions). Get it from Supabase dashboard
-# → Project Settings → API → service_role key. NOT exposed to the client.
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-
-# Your Groq API key (get one at https://console.groq.com/keys)
-GROQ_API_KEY=gsk_your_groq_api_key_here
-
-# Optional — ad slots remain disabled unless explicitly enabled.
-ADS_ENABLED=false
-
-# Optional — your app's public URL (defaults to http://localhost:3000)
-# NEXT_PUBLIC_SITE_URL=https://your-app.vercel.app
- - **Public prompt library** — Share selected generations at `/p/[slug]` and browse them at `/explore`
- - **Platform formats** — Tailor output for Claude Code, Cursor, v0, Windsurf, or a generic target
- - **Ad readiness** — Fixed ad slots are available but disabled by default with `ADS_ENABLED=false`
-
-| `/api/generations/:id/publish` | POST | Publish or unpublish a generation |
-| `/api/explore` | GET | List public prompts with pagination and stack filtering |
-| `/p/:slug` | GET | View a public prompt |
-| `/explore` | GET | Browse public prompts |
----
-
-### Step 4: Enable Google OAuth in Supabase
-
-1. In your Supabase dashboard, go to **Authentication → Providers**.
-2. Click **Google** and toggle it **Enabled**.
-3. You'll need a Google OAuth client ID and secret:
-   - Go to [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
-   - Create a new OAuth 2.0 Client ID (Web application type)
-   - Add `https://xxxxx.supabase.co/auth/v1/callback` as an authorized redirect URI
-   - Copy the Client ID and Client Secret into Supabase
-4. Under **Authentication → URL Configuration**, set **Site URL** to `http://localhost:3000`.
-5. In the same section, add `http://localhost:3000/auth/callback` to **Redirect URLs**.
-
----
-
-### Step 5: Run the database migration
-
-Your Supabase project needs three tables: `anon_sessions`, `sessions`, and `generations`.
-
-**Option A: Run via Supabase SQL Editor (easiest)**
-
-1. In your Supabase dashboard, go to **SQL Editor**.
-2. Click **New query**.
-3. Open `packages/db/migrations/001_auth_tables.sql` and copy the entire contents.
-4. Paste into the SQL Editor and click **Run**.
-5. Verify all three tables appear under **Table Editor**.
-
-**Option B: Run via Supabase CLI**
-
-```bash
-# Install Supabase CLI: https://supabase.com/docs/guides/cli
-supabase link --project-ref <your-project-ref>
-supabase db push
-````
-
----
-
-### Step 6: Start the development server
-
-```bash
+```sh
 pnpm dev
 ```
 
-This starts the Next.js dev server on [http://localhost:3000](http://localhost:3000) with Turborepo watch mode — changes to any `packages/` directory are hot-reloaded automatically.
+Open <http://localhost:3000>. To enable Google sign-in, enable Google under Supabase Authentication providers and add the local and deployed `/auth/callback` URLs to Supabase's redirect URL allowlist.
 
----
+## Environment variables
 
-### Step 7: Verify everything works
-
-1. **Open** [http://localhost:3000](http://localhost:3000) — you should see the onboarding wizard.
-2. **Complete the onboarding** (3 questions about your project).
-3. **Submit a prompt** — this calls `POST /api/generate`, which uses Groq API to analyze your idea and generates a structured recommendation.
-4. **Check the response** — you should see a recommendation panel with stack, tools, and skills.
-5. **Sign in with Google** — click the profile icon (top-right), then "Continue with Google".
-6. **Verify session persistence** — your anonymous generations should be claimed and visible in the profile modal.
-
-If you get stuck, check:
-
-| Symptom                                                                              | Likely cause                                                 |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `POST /api/generate` returns 500 with `"Could not find the table 'public.sessions'"` | Database tables not created — run the migration (see Step 5) |
-| `GROQ_API_KEY is not configured`                                                     | Missing or incorrect `GROQ_API_KEY` in `apps/web/.env.local` |
-| Google sign-in redirects to an error page                                            | OAuth redirect URL not configured correctly (see Step 4)     |
-| Anonymous sessions not persisting after sign-in                                      | Google email may differ; check Supabase Auth users           |
-| Onboarding doesn't appear                                                            | Clear cookies/local data or check `middleware.ts`            |
-
----
-
-## Features
-
-- **Anonymous browsing** — No sign-up required for the first 3 generations
-- **Google OAuth** — Persistent login via httpOnly cookies (no localStorage)
-- **Onboarding wizard** — 3 questions seed your first prompt
-- **Real LLM generation** — Groq-powered stack/tools/skills recommendations
-- **Refinement** — Iterate on your prompt, each version saved
-- **Version history** — Browse previous versions with prev/next navigation
-- **Session history** — Paginated, lazy-loaded, accessible from the profile modal
-- **Anonymous session claim** — Sign in later to claim your pre-signup sessions
-- **Rate limiting** — In-memory per-IP sliding window (configurable)
-- **Anonymous usage cap** — 3 free generations before requiring sign-in
-
-## Architecture decisions
-
-- **No localStorage/sessionStorage** — All session state lives in httpOnly cookies (auth) or server-side Postgres (data). The browser never reads or writes auth tokens.
-- **Single-page app** — The entire product is `/`. No sidebar. History, profile, and settings live in a top-right modal.
-- **Single deployable** — `apps/web` is the only deployable, keeping it at two managed services (Vercel + Supabase).
-- **Swappable engine** — `packages/engine` is pure TypeScript with no framework dependency. It can be lifted into a standalone service later.
+| Variable | Required | Description |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase public anon key used by the app |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only service-role key for privileged database operations; never expose it to the browser |
+| `GROQ_API_KEY` | Yes | Server-side Groq API key |
+| `NEXT_PUBLIC_SITE_URL` | No | Canonical app URL used for OAuth redirects; defaults to `http://localhost:3000` |
+| `ADS_ENABLED` | No | Enables ad slots when set to `true`; defaults to disabled |
+| `NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN` | No | Enables Cloudflare Web Analytics when set; analytics is omitted when unset |
 
 ## API reference
 
-| Endpoint                      | Method | Description                                      |
-| ----------------------------- | ------ | ------------------------------------------------ |
-| `/api/generate`               | POST   | Generate a recommendation from an idea           |
-| `/api/generations`            | GET    | Browse session generations (by `session_id`)     |
-| `/api/sessions`               | GET    | List user sessions (paginated)                   |
-| `/api/sessions/claim`         | POST   | Claim anonymous sessions after sign-in           |
-| `/api/sessions/pending-claim` | GET    | Check how many anonymous sessions can be claimed |
-| `/api/auth/user`              | GET    | Get current user info                            |
-| `/api/auth/signin`            | GET    | Start Google OAuth flow                          |
-| `/api/auth/signout`           | GET    | Sign out and redirect home                       |
-| `/auth/callback`              | GET    | OAuth callback handler                           |
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/api/generate` | POST | Generate or refine a recommendation |
+| `/api/generations` | GET | Fetch a session's generations or a selected version; uses `session_id` and optional `version` query parameters |
+| `/api/generations/[id]/publish` | POST | Publish or unpublish a generation |
+| `/api/sessions` | GET | List the signed-in user's sessions with pagination |
+| `/api/sessions/claim` | POST | Claim anonymous sessions after sign-in |
+| `/api/sessions/pending-claim` | GET | Count anonymous sessions available to claim |
+| `/api/explore` | GET | List public prompts with pagination and optional tag filter |
+| `/api/auth/user` | GET | Return the current signed-in user, if any |
+| `/api/auth/signin` | GET | Start the Google OAuth flow and return its URL |
+| `/api/auth/signout` | GET | Sign out and redirect to the app root |
+| `/auth/callback` | GET | Complete the Supabase OAuth callback |
+
+## Development commands
+
+```sh
+pnpm dev        # Run the web app in development
+pnpm typecheck  # Type-check workspace packages
+pnpm lint       # Lint workspace packages
+pnpm test       # Run package tests
+pnpm build      # Build the workspace
+```
+
+GitHub Actions runs install, typecheck, lint, test, and build on pushes and pull requests.
 
 ## License
 
-MIT
+Primer is released under the MIT License. See [LICENSE](LICENSE).

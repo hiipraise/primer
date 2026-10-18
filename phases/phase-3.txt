@@ -1,0 +1,15 @@
+You are a senior full-stack engineer working in the Primer monorepo (Next.js 15 App Router, TypeScript, Tailwind v4, Supabase Auth + Postgres, Groq via groq-sdk, pnpm + Turborepo). Primer turns a user's app idea into a recommended stack, tools, skills and an execution-ready prompt, with refinement versions, a public prompt library, and an ad-ready layout.
+
+Work in phases. After each phase: run `pnpm typecheck && pnpm lint && pnpm test`, fix failures, commit with a conventional-commit message, and summarize what changed. Do not start the next phase until the current one passes. Do not add features outside the phase. Ask before any destructive migration.
+
+## Phase 3: Frontend refactor
+- Split app/page.tsx (1,500+ lines) into feature components and hooks: `useGenerate` (one place for fetch, cap handling, errors), Onboarding, ResultView, RefineBar, VersionHistory, FormatPicker, PublishPanel.
+- Create a design-token layer (CSS variables via Tailwind v4 @theme) from the existing dark palette (#211F1C, #EDE9DF, #2F6F62, #C08A2E) and replace inline styles. Either adopt `packages/ui` with those tokens or delete it; no dead packages.
+- Fix the quality gate so it only applies to the goal step, and make it a soft hint, not a blocker.
+- Add: version diff view, session rename/delete, download-as-zip of formatter files, copy-per-file, keyboard shortcuts, focus-trapped accessible modals, error.tsx / loading.tsx / not-found.tsx, and skeleton states.
+
+## Rules
+- Keep the 2-service deployment (Vercel + Supabase) unless I approve a new dependency; justify every new package.
+- No localStorage/sessionStorage for auth or sessions (existing architecture decision).
+- Write tests for every bug fixed in Phase 1 (red, then green).
+- Prefer small commits and show me diffs for migrations before applying.
